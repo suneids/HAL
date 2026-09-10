@@ -76,10 +76,15 @@ void TIM_RegisterHandler(TIM_TypeDef *TIMx, TimHandler_t handler){
 }
 
 
-void TIM3_IRQHandler(void){
-	if(TIM3->SR & TIM_SR_UIF)   TIM3->SR &= ~TIM_SR_UIF;
-	if(tim_handlers[2] != NULL) tim_handlers[2]();
+void TIM3_TIM4_IRQHandler(void)
+{
+    if(TIM3->SR & TIM_SR_UIF)
+    {
+        TIM3->SR &= ~TIM_SR_UIF;
 
+        if(tim_handlers[2] != NULL)
+            tim_handlers[2]();
+    }
 }
 
 

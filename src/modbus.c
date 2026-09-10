@@ -53,8 +53,14 @@ void MODBUS_Init(Modbus_cfg *cfg){
 
 	TIM_RegisterHandler(config->timer, MODBUS_Timer_IRQHandler);
 
-	if(config->timer == TIM2) NVIC_EnableIRQ(TIM2_IRQn);
-	//else if(config->timer == TIM3) NVIC_EnableIRQ(TIM3_IRQn);
+	if(config->timer == TIM2) {
+	    NVIC_ClearPendingIRQ(TIM2_IRQn);
+	    NVIC_EnableIRQ(TIM2_IRQn);
+	}
+	else if(config->timer == TIM3) {
+	    NVIC_ClearPendingIRQ(TIM3_TIM4_IRQn);
+	    NVIC_EnableIRQ(TIM3_TIM4_IRQn);
+	}
 
 }
 
@@ -89,6 +95,8 @@ static void ReconfigureUARTCFG(void)
 
 	USART_Init(config->USARTx, baud, parity, stop_bits);
 	TIM_Init(config->timer, psc, (uint16_t)(t35_us - 1u), 0);
+	config->timer->SR &= ~TIM_SR_UIF;
+	config->timer->DIER |= TIM_DIER_UIE;
 }
 
 

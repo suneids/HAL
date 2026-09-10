@@ -2,6 +2,10 @@
 
 #if defined(STM32G0B1xx)
 
+#ifndef DMA_REQUEST_SPI1_TX
+#define DMA_REQUEST_SPI1_TX 0x11u
+#endif
+
 #ifndef DMA_REQUEST_ADC1
 #define DMA_REQUEST_ADC1 5u
 #endif
@@ -84,19 +88,57 @@ void DMA_Init(DMA_Channel_TypeDef *DMAx, uint32_t peripheral_addr, uint32_t memo
 }
 
 
-void SPI1_DMA_TX_Init(void)
+
+void SPI1_DMA_TX_Init(void){
+    RCC->AHBENR |= RCC_AHBENR_DMA1EN;
+
+#ifdef RCC_AHBENR_DMAMUX1EN
+    RCC->AHBENR |= RCC_AHBENR_DMAMUX1EN;
+#endif
+
+    DMA1_Channel3->CCR &= ~DMA_CCR_EN;
+
+    DMA_ClearFlags(DMA1_Channel3);
+
+    // DMA1_Channel3 -> DMAMUX1_Channel2 -> SPI1_TX
+    DMA_SetRequest(DMA1_Channel3, DMA_REQUEST_SPI1_TX);
+
+    DMA1_Channel3->CPAR = (uint32_t)&SPI1->DR;
+
+    DMA1_Channel3->CCR =
+          DMA_CCR_DIR       // memory -> peripheral
+        | DMA_CCR_MINC      // increment memory
+        | DMA_CCR_TCIE      // IRQ on complete
+        | DMA_CCR_PL_1;     // high priority
+
+    // PSIZE=00, MSIZE=00 -> 8 bit
+    // CIRC=0 -> normal mode
+
+    NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
+}
+
+
+void SPI1_DMA_TX_Start(const uint8_t *buf, uint16_t len)
 {
+    if (!buf || len == 0u)
+        return;
 
+    DMA1_Channel3->CCR &= ~DMA_CCR_EN;
+
+    DMA_ClearFlags(DMA1_Channel3);
+
+    DMA1_Channel3->CMAR  = (uint32_t)buf;
+    DMA1_Channel3->CNDTR = len;
+
+    SPI1->CR2 |= SPI_CR2_TXDMAEN;
+
+    DMA1_Channel3->CCR |= DMA_CCR_EN;
 }
 
-
-void SPI1_DMA_TX_Start(const uint8_t *buf, uint16_t len){
-
-}
-
-
-void SPI1_DMA_TX_Stop(){
-
+void SPI1_DMA_TX_Stop(void)
+{
+    DMA1_Channel3->CCR &= ~DMA_CCR_EN;
+    SPI1->CR2 &= ~SPI_CR2_TXDMAEN;
 }
 
 uint8_t DMA_IsReady(DMA_Channel_TypeDef *DMAx)
@@ -114,4 +156,5 @@ uint8_t DMA_IsReady(DMA_Channel_TypeDef *DMAx)
 
     return 1u;
 }
+
 #endif
