@@ -1,318 +1,545 @@
-Selfwritten High Abstractive Layer for STM32F103C6T6
-Instruction for using modules:
+<table align="right">
+  <tr>
+    <td><b>🇬🇧 English</b></td>
+    <td><a href="./README_RU.md">🇷🇺 Русский</a></td>
+  </tr>
+</table>
+
+# ⚙️ HAL — Lightweight Register-Level STM32 Hardware Abstraction
+
+A lightweight C hardware abstraction library for STM32 microcontrollers built directly on top of **CMSIS and peripheral registers**.
+
+The library started as a small STM32F103 driver collection and gradually evolved into a multi-family abstraction layer used across robotics, measurement equipment and embedded control projects.
+
+The goal is not to hide the MCU completely.
+
+The goal is to remove repetitive hardware setup while keeping timing, resource allocation and important hardware behavior visible to the application.
+
+> **Explicit where it matters, automatic where it is mechanical.**
 
 ---
 
-<h2 align=center>GPIO</h2>
+## 🧠 Design Philosophy
 
-| Functions | Description |
-| --------- | ----- |
-| void pinMode(Pin_t pin, uint8_t mode, uint8_t cnf, uint8_t pull) | Configures one pin. Adjusts the MODE and CNF bits in the CRL/CRH registers, including Pull-up/down control. |
-| void pinModeMulti(Pin_t* pins, size_t pins_number, uint8_t mode, uint8_t cnf, uint8_t pull) | Group initialization of an array of pins with the same parameters. Optimizes the code when configuring data buses |
-| void digitalWrite(Pin_t pin, uint8_t value) | Sets the output status (High/Low). Uses the BSRR register to atomically change the state of a bit. |
-| uint8_t digitalRead(Pin_t pin) | Returns the current logical state of the pin by reading the value from the input data register (IDR). |
-| void pinToggle(Pin_t pin) | Inverts the current state of the output pin. It is convenient for debugging and display (Heartbeat LED). |
+The original STM32F103 implementation followed a very strict rule:
 
-## Code example: GPIO
-```C
-  // LED on PC13
-  enableGPIOClock(GPIOC);
-  pinMode(PC13, GPIO_MODE_OUTPUT_50MHZ, GPIO_CNF_OUT_PUSH_PULL, GPIO_PULL_NONE);
+> Nothing should happen implicitly.
+
+This was useful while learning the hardware, but it also produced unnecessary application-level boilerplate.
+
+For example, using PWM could require separately configuring:
+
+```text
+timer clock
+→ timer base
+→ GPIO mode
+→ alternate function
+→ PWM channel
+→ output enable
 ```
 
+The newer G0/G4 architecture is more pragmatic.
+
+The application specifies the information that actually matters:
+
+```c
+TIM_Init(TIM2, psc, arr, 0);
+PWM_Init(PA0);
+PWM_Write(PA0, value);
+```
+
+`PWM_Init()` internally performs the mechanical setup associated with that pin:
+
+```text
+pin
+ ↓
+timer/channel lookup
+ ↓
+timer clock enable
+ ↓
+GPIO alternate-function configuration
+ ↓
+PWM channel configuration
+```
+
+The timer frequency and resolution remain explicit because they affect application behavior.
+
 ---
 
-<h2 align=center>USART</h2>
+## 🏗 Architecture
 
-| Functions | Description |
-| --------- | ----- |
-| void echo(USART_TypeDef *USARTx) | A debug utility that immediately retransmits received data back to the sender. Useful for link testing. |
-| void usartInit(USART_TypeDef *USARTx, uint32_t baud_rate) | High-level initializer. Configures baud rate, parity, and stop bits, then enables the USART peripheral. | 
-| uint16_t usartAvailable(USART_TypeDef *USARTx) | Returns the number of bytes currently waiting in the receive buffer. Essential for non-blocking reads. |
-| void usartWriteByte(USART_TypeDef *USARTx, char byte) | Transmits a single 8-bit character. Waits for the TXE flag to ensure the register is ready. |
-| void usartWriteLine(USART_TypeDef *USARTx, const char *str) | Transmits a null-terminated string followed by line ending characters (CR/LF). |
-| char usartReadByte(USART_TypeDef *USARTx) | Reads a single byte from the DR register. Blocks until the RXNE flag is set. |
-| void usartReadBytes(USART_TypeDef *USARTx, char *buf, uint32_t max_len) | Reads a stream of data into a buffer until max_len is reached or a timeout occurs. |
-| void USART_IRQHandler_Generic(USART_TypeDef *USARTx) | A centralized interrupt handler that manages RX/TX events for any given USART instance |
-| uint32_t usartDiv(uint32_t F_CPU, uint32_t baud_rate) | Internal helper. Calculates the required USARTDIV value based on $f_{CPU}$ and target baud rate. |
-| uint8_t usartIndex(USART_TypeDef *USARTx) | Returns the hardware instance index (0 for USART1, etc.). Used for peripheral mapping and offsets. |
+```mermaid
+flowchart TD
+    APP["Application"]
 
-## How to use
-> [!NOTE]
->- **Clocking**: The usartInit function internally handles the calculation of the USARTDIV using the usartDiv helper, based on the current $f_{CPU}$.
->- **Interrupts**: If you plan to use USART_IRQHandler_Generic, ensure you have enabled the USART interrupt in the NVIC and set the RXNEIE bit in the CR1 register.
->- **Debug**: Use echo(USART1) in your while(1) loop to verify that your hardware connection (TX/RX lines) and baud rate settings are correct.
+    API["Common API\ninc/"]
 
-## Code Example: USART
-```C
-// Initialize USART1 at 115200 baud
-usartInit(USART1, 115200);
+    F103["STM32F103 backend\nsrc/ll/f103/"]
+    G0["STM32G0 backend\nsrc/ll/g0/"]
+    G4["STM32G474 backend\nsrc/ll/g474/"]
 
-// Simple log message
-usartWriteLine(USART1, "System Started. Hexapod MK3 online.");
+    CMSIS["CMSIS + STM32 Registers"]
 
-// Non-blocking read example
-if (usartAvailable(USART1)) {
-    char data = usartReadByte(USART1);
-    // Process incoming command
+    MW["Middleware / Services\nModbus RTU · NVStore · software buses"]
+
+    APP --> API
+    APP --> MW
+
+    API --> F103
+    API --> G0
+    API --> G4
+
+    F103 --> CMSIS
+    G0 --> CMSIS
+    G4 --> CMSIS
+
+    MW --> API
+```
+
+Public interfaces are placed in `inc/`, while MCU-specific register implementations are separated into family-specific backends.
+
+This keeps application code relatively stable while allowing the low-level implementation to follow the actual peripheral architecture of each STM32 family.
+
+---
+
+## 🎯 MCU Support
+
+| MCU | Status | Role |
+|---|---|---|
+| STM32F103 | ✅ Supported / Legacy | Original backend and older abstraction model |
+| STM32G0B1 | ✅ Primary | Current architecture and main development target |
+| STM32G474 | 🚧 In progress | Backend exists, target integration is not finished |
+
+### STM32F103
+
+The F103 backend is the oldest part of the library.
+
+It remains usable and is still used by older projects, but several modules reflect the original, more manual abstraction philosophy.
+
+It is intentionally treated as a **legacy backend** rather than the architectural reference for new development.
+
+### STM32G0B1
+
+STM32G0B1 is the current primary target.
+
+This backend contains the newer initialization model, peripheral clock handling, alternate-function setup, error handling and newer services.
+
+### STM32G474
+
+A G474 backend already exists for most core peripherals, but integration is still incomplete.
+
+It is currently considered **work in progress**, not a fully supported target.
+
+---
+
+## 🔌 Peripheral Support
+
+| Peripheral / Service | F103 | G0B1 | G474 |
+|---|:---:|:---:|:---:|
+| GPIO | ✅ | ✅ | 🚧 |
+| TIM / SysTick | ✅ | ✅ | 🚧 |
+| PWM | ✅ | ✅ | 🚧 |
+| ADC | ✅ | ✅ | 🚧 |
+| DMA | ✅ | ✅ | 🚧 |
+| USART | ✅ | ✅ | 🚧 |
+| I²C | ✅ | ✅ | 🚧 |
+| SPI | ✅ | ✅ | 🚧 |
+| Flash LL | ✅ | ✅ | 🚧 |
+| NVStore | ✅ | ✅ | 🚧 |
+| DAC | — | ✅ | 🚧 |
+| FDCAN / Classic CAN mode | — | ✅ | 🚧 |
+| EXTI | ✅ | — | — |
+
+`🚧` indicates that a backend implementation exists but the STM32G474 target is still under integration.
+
+---
+
+## 📍 GPIO
+
+GPIO is represented by a small pin structure rather than board-specific Arduino-style pin numbers.
+
+The implementation directly configures STM32 GPIO registers while exposing a common API:
+
+```c
+GPIO_PinMode(pin);
+GPIO_PinModeMulti(pins, count);
+
+GPIO_DigitalWrite(pin, 1);
+GPIO_DigitalRead(pin);
+GPIO_PinToggle(pin);
+```
+
+The actual configuration fields remain family-specific because STM32F1 GPIO configuration differs substantially from newer STM32 families.
+
+---
+
+## ⏱ Timers and PWM
+
+The timer layer provides:
+
+- general-purpose timer initialization;
+- SysTick-based millisecond timebase;
+- `millis()`;
+- blocking millisecond delay;
+- timer callback registration;
+- runtime clock-frequency calculation.
+
+PWM uses a pin-to-timer mapping table.
+
+For example, on G0:
+
+```c
+TIM_Init(TIM2, 63, 999, 0);
+
+PWM_Init(PA0);
+PWM_Write(PA0, 500);
+```
+
+The caller explicitly controls the timer base.
+
+`PWM_Init()` then automatically resolves:
+
+```text
+PA0
+ ↓
+TIM2
+ ↓
+Channel 1
+ ↓
+Alternate Function
+```
+
+and performs the required GPIO and timer-channel configuration.
+
+---
+
+## 📡 USART
+
+USART implements interrupt-driven RX/TX with ring buffers.
+
+```c
+USART_Init(USART2, 115200, 0, 1);
+
+USART_WriteLine(
+    USART2,
+    "System online\r\n",
+    15
+);
+
+if (USART_Available(USART2)) {
+    char byte = USART_ReadByte(USART2);
 }
 ```
 
+The driver handles:
+
+- peripheral clock enable;
+- TX/RX GPIO configuration;
+- NVIC configuration;
+- baud-rate register calculation;
+- parity and stop-bit setup;
+- interrupt-driven RX/TX;
+- circular software buffers.
+
+Custom RX and TX callbacks can also be attached through:
+
+```c
+USART_SetHandlers(...);
+```
+
+This mechanism is used by higher-level protocols such as Modbus RTU.
+
 ---
 
-<h2 align=center>TIM</h2>
+## 🔗 I²C
 
-| Functions | Description |
-| --------- | ----- |
-| void sysTickInit(void) | Configures the system tick timer to generate interrupts every 1ms. Essential for time-base management. |
-| uint32_t millis(void) | Returns the number of milliseconds elapsed since the program started. Used for non-blocking delays and timing. |
-| void timerInit(TIM_TypeDef *TIMx, uint32_t psc, uint32_t arr, uint8_t debounce) | General-purpose timer initializer. Sets Prescaler (PSC) and Auto-Reload (ARR) values, with optional debounce filtering. |
-| void sysTickDelay(uint32_t ms) | Implements a blocking delay in milliseconds using the SysTick counter. Accurate but halts main execution. |
-| void timRegisterHandler(TIM_TypeDef *TIMx, TimHandler_t handler) | Attaches a callback function (handler) to a specific timer instance. Enables modular interrupt processing. |
+The G0 implementation includes more than basic register transactions.
 
-## How to use
-> [!NOTE]
->- **Timebase**: sysTickInit() must be called at the very beginning of main(). It populates the global tick counter used by millis() and sysTickDelay().
->- **Timer Calculation**: For a 72MHz clock, PSC=7199 gives a 10kHz timer frequency. The ARR value then determines the overflow period.
->- **Interrupts**: Use timRegisterHandler() to link your logic (e.g., motor control or sensor sampling) to a hardware timer without modifying the core HAL files.
+Initialization performs:
 
-## Code Example: TIM & SysTick
-```C
-// Initialize System Tick for millis() support
-sysTickInit();
+```text
+bus recovery
+→ GPIO setup
+→ peripheral clock/reset
+→ timing configuration
+→ peripheral enable
+```
 
-// Set up TIM2 to trigger every 100ms
-// Formula: Update_Event = f_CK_PSC / ((PSC + 1) * (ARR + 1))
-timerInit(TIM2, 7199, 999, 0); 
+Before enabling the hardware controller, the driver can generate recovery clocks on SCL to release a slave holding the bus.
 
-while(1) {
-    static uint32_t last_time = 0;
-    if (millis() - last_time >= 500) {
-        last_time = millis();
-        pinToggle(PC13); // Heartbeat every 500ms
-    }
-}
+The transaction layer includes:
+
+- register write;
+- array write;
+- single-register read;
+- burst read;
+- repeated START;
+- timeout handling;
+- NACK detection;
+- bus error detection;
+- arbitration-loss detection;
+- overrun handling.
+
+Example:
+
+```c
+I2C_Init(I2C1, SDA, SCL);
+
+I2C_WriteReg(
+    I2C1,
+    device_address,
+    register_address,
+    value
+);
+
+I2C_Read_Burst(
+    I2C1,
+    device_address,
+    start_register,
+    buffer,
+    sizeof(buffer)
+);
+```
+
+The F103 implementation is older and simpler; the G0 backend represents the current design direction.
+
+---
+
+## 🔄 SPI
+
+The SPI API separates a physical bus from devices connected to that bus.
+
+```text
+SPI_Handle_t
+     ↓
+SPI bus configuration
+
+SPI_Device_t
+     ↓
+bus + chip-select
+```
+
+The API supports:
+
+- SPI modes 0–3;
+- configurable clock divider;
+- MSB/LSB bit order;
+- software chip select;
+- generic transfers;
+- read/write operations;
+- register helpers for 8/16/24-bit data;
+- big-endian and little-endian register access.
+
+This allows several devices to share one SPI peripheral while maintaining independent CS configuration.
+
+---
+
+## 🚌 FDCAN
+
+The STM32G0 backend provides a compact API for Classic CAN communication through the FDCAN peripheral:
+
+```c
+FDCAN_Init(FDCAN1, 500000u);
+
+FDCAN_Send(
+    FDCAN1,
+    message_id,
+    data,
+    length
+);
+
+FDCAN_Read(
+    FDCAN1,
+    &message_id,
+    data,
+    &length
+);
+```
+
+`FDCAN_Init()` internally handles:
+
+- GPIO alternate-function setup;
+- peripheral clock selection;
+- FDCAN clock enable;
+- bitrate calculation;
+- nominal bit timing;
+- Message RAM layout;
+- RX/TX FIFO configuration;
+- protocol initialization.
+
+The current configuration uses:
+
+- 16 time quanta per bit;
+- 87.5% nominal sample point;
+- standard 11-bit CAN identifiers;
+- Classic CAN frames up to 8 bytes.
+
+This driver is used by the distributed control architecture of the [Hexapod](https://github.com/suneids/Hexapod).
+
+---
+
+## 💾 Flash and NVStore
+
+The library contains low-level internal Flash drivers together with a higher-level persistent storage service.
+
+`NVStore` is designed for configuration data that must survive reset and unexpected power loss.
+
+Its storage format uses:
+
+```text
+Header
+  ├── magic
+  ├── sequence number
+  ├── version
+  └── payload length
+
+Payload
+
+Tail
+  ├── CRC32
+  └── commit marker
+```
+
+The commit marker is written last.
+
+Therefore an interrupted write does not automatically become a valid record after reboot.
+
+The storage layer also provides:
+
+- CRC32 validation;
+- monotonically increasing sequence numbers;
+- record scanning after startup;
+- two-page storage;
+- page rollover;
+- payload versioning;
+- detection of incomplete records.
+
+Public API:
+
+```c
+NV_Init(&store);
+NV_Load(&store, &config, sizeof(config));
+NV_Save(&store, &config, sizeof(config));
 ```
 
 ---
 
-<h2 align=center>PWM</h2>
+## 📟 Modbus RTU
 
-| Functions | Description |
-| --------- | ----- |
-| void pwmInit(Pin_t pin) | Configures the GPIO pin for Alternate Function and initializes the corresponding Timer channel in PWM mode. |
-| void pwmWrite(Pin_t pin, uint16_t value) | Updates the Capture/Compare Register (CCR) to set the pulse width, effectively controlling motor speed or LED brightness. |
-| TimerChannel_t getTIMChannel(Pin_t pin) | Internal helper. Maps a specific GPIO pin to its hardware Timer channel based on the STM32 pinout. |
+The repository also contains a Modbus RTU slave implementation built on top of the USART layer.
 
-## How to use
-> [!NOTE]
->- **Auto-Mapping**: The pwmInit uses getTIMChannel to automatically configure the correct Timer and Channel associated with the pin. No need to look up datasheets for every pin.
->- **Resolution**: The range of the value in pwmWrite depends on the ARR register setting of the underlying Timer.
->- **Hardware**: Ensure the pin supports Alternate Function (AF) for the specific timer channel.
+Currently implemented functions:
 
-## Code Example: PWM
-```C
-// Initialize PWM on a specific pin (e.g., PA0 - TIM2 Channel 1)
-pwmInit(PA0);
+| Function | Operation |
+|---|---|
+| `0x03` | Read Holding Registers |
+| `0x06` | Write Single Register |
+| `0x10` | Write Multiple Registers |
 
-// Set duty cycle (0 to ARR value)
-pwmWrite(PA0, 500); 
+The implementation includes:
 
-// Example: Breathing LED effect
-while(1) {
-    uint32_t duty = (millis() / 10) % 1000;
-    pwmWrite(PA0, duty);
-}
+- Modbus CRC16;
+- register-range validation;
+- exception responses;
+- broadcast handling;
+- configurable writable-register policy;
+- application-level value validation callbacks;
+- runtime UART configuration support;
+- deferred persistent-storage update hooks.
+
+This layer is used in measurement and industrial-interface projects.
+
+---
+
+## 🧩 Abstraction Boundary
+
+The library deliberately does **not** attempt to make every STM32 peripheral look like a generic platform-independent device.
+
+### Kept explicit
+
+Things that materially affect system behavior remain visible:
+
+- selected peripheral;
+- timer frequency and resolution;
+- baud rate;
+- CAN bitrate;
+- application buffers;
+- protocol configuration;
+- pin selection where routing matters.
+
+### Handled internally
+
+Mechanical setup is progressively moved into the driver:
+
+- RCC peripheral clock enable;
+- GPIO alternate-function setup;
+- peripheral reset;
+- pin-to-channel mapping;
+- required NVIC setup;
+- register initialization boilerplate.
+
+This keeps the application close to the hardware without repeatedly reimplementing the same initialization sequence.
+
+---
+
+## 📁 Repository Structure
+
+```text
+HAL/
+├── inc/
+│   ├── adc.h
+│   ├── dac.h
+│   ├── dma.h
+│   ├── fdcan.h
+│   ├── flash_ll.h
+│   ├── gpio.h
+│   ├── i2c.h
+│   ├── modbus.h
+│   ├── nvstore.h
+│   ├── pwm.h
+│   ├── spi.h
+│   ├── tim.h
+│   └── usart.h
+│
+├── src/
+│   ├── ll/
+│   │   ├── f103/
+│   │   ├── g0/
+│   │   └── g474/
+│   │
+│   ├── modbus.c
+│   ├── soft_i2c.c
+│   └── utilities.c
+│
+├── ST/
+│   ├── f103/
+│   └── g0/
+│
+├── Midleware/
+└── README.md
 ```
 
 ---
 
-<h2 align=center>I2C</h2>
+## 🔨 Used In
 
-| Functions | Description |
-| --------- | ----- |
-| void I2C_Init(I2C_TypeDef *I2Cx, Pin_t SDA, Pin_t SCL) | Sets up the hardware I2C peripheral, including clock speed and GPIO pins configuration (SDA/SCL). |
-| void I2C_Start(I2C_TypeDef *I2Cx) | Generates a START condition on the bus. Manages the SB (Start Bit) flag in the Status Register. |
-| void I2C_WriteReg(I2C_TypeDef *I2Cx, uint8_t devAddr, uint8_t regAddr, uint8_t data) | Writes a single byte to a specific register of a slave device. Handles addressing and data transmission. |
-| void I2C_WriteByteArray(I2C_TypeDef *I2Cx, uint8_t devAddr, uint8_t regAddr, uint8_t *pData, uint16_t len) | Transmits multiple bytes to a slave device. Efficient for loading configuration tables or large data sets. |
-| uint8_t I2C_ReadReg(I2C_TypeDef *I2Cx, uint8_t devAddr, uint8_t regAddr) | Reads a single byte from a target register. Manages the transition between Write (addressing) and Read modes. |
-| void I2C_Read_Burst(I2C_TypeDef *I2Cx, uint8_t devAddr, uint8_t regAddr, uint8_t *pBuffer, uint16_t size) | High-performance sequential read. Reads multiple bytes in a single transaction, essential for IMU sensor data. |
+The library is not an isolated API experiment — it is used as infrastructure in larger projects:
 
-## Hardware constraint (PB5 / I2C1_SMBA)
-> [!CAUTION]
-> PB5 is mapped to I2C1_SMBA (SMBus Alert).<br/>
-> When I2C1 is enabled (I2C_CR1.PE = 1), the peripheral takes control of this pin via Alternate Function.<br/>
-> As a result, TIM3_CH2 (PWM) or GPIO usage on PB5 will stop working.<br/>
-> Do not use PB5 for PWM if I2C1 is active.
-
-## How to use
-> [!NOTE]
->- **Addressing**: Note that the library expects a 7-bit address. You must shift it left by 1 bit (address << 1) before passing it to the functions, or ensure the library handles it internally.
->- **Blocking Operations**: These functions wait for hardware flags (like SB, ADDR, RXNE). If the bus is physically broken, it may lead to a hang. Use with caution in critical systems.
->- **Burst Read**: I2C_Read_Burst is optimized for reading IMU data. It automatically manages the ACKing of bytes and generates a NACK followed by a STOP condition after the last byte.
-
-## Code Example: I2C (MPU9250 Example)
-```C
-// Initialize I2C1 with PA9 (SDA) and PA10 (SCL)
-I2C_Init(I2C1, PA9, PA10);
-
-// Writing to a register (e.g., wake up sensor)
-I2C_WriteReg(I2C1, 0x68 << 1, 0x6B, 0x00); 
-
-// Burst read 6 bytes (Accel X, Y, Z)
-uint8_t accelData[6];
-I2C_Read_Burst(I2C1, 0x68 << 1, 0x3B, accelData, 6);
-```
+- [🕷️ Hexapod](https://github.com/suneids/Hexapod) — distributed STM32 control and CAN;
+- [🧤 Glove MK2](https://github.com/suneids/Glove) — ADC/DMA, I²C, USART, PWM;
+- [🚗 RC Car MK2.5](https://github.com/suneids/Car) — PWM, USART and low-level control;
+- industrial and measurement-device firmware using Modbus RTU and persistent configuration storage.
 
 ---
 
-<h2 align=center>EXTI</h2>
+## 🚧 Current Direction
 
-| Functions | Description |
-| --------- | ----- |
-| void extiRegisterHandler(Pin_t pin, ExtiHandler_t handler) | Configures the external interrupt line for a specific pin and selects the trigger edge (Rising/Falling/Both). |
-| void extiInit(Pin_t pin, ExtiEdge) | Registers a callback function to be executed when the interrupt occurs on the specified pin. |
-| void extiClearFlag(Pin_t pin) | Clears the Pending Register (PR) bit to acknowledge the interrupt and allow future triggers. |
-| void EXTIx_User_Handler(void) | Weak interrupt handlers. Can be overridden in user code to implement custom logic without modifying the library. |
+Current development focuses on:
 
-## How to use
-> [!NOTE]
->- **Mapping**: EXTI lines are shared between ports (e.g., PA0, PB0, and PC0 all use EXTI0). The library handles the AFIO multiplexer to route the correct port to the line.
->- **Handlers**: Use extiRegisterHandler to pass a function pointer. This keeps your main.c clean and modular.
->- **Pending Flags**: The extiClearFlag is called internally within the ISR (Interrupt Service Routine) to ensure the interrupt doesn't re-trigger immediately, but it is also available for manual control.
+- STM32G0 as the primary stable backend;
+- gradual migration away from legacy F103-specific assumptions;
+- completing STM32G474 integration;
+- moving repetitive initialization into peripheral drivers;
+- keeping hardware-critical parameters explicit at application level.
 
-## Code Example: EXTI (Interrupts)
-```C
-// Callback function for button press
-void myButtonHandler(void) {
-    pinToggle(PC13); // Flash LED on press
-}
-
-// Setup EXTI on PA0, Falling edge trigger
-extiInit(PA0, EXTI_FALLING);
-extiRegisterHandler(PA0, myButtonHandler);
-```
-
----
-
-<h2 align=center>DMA</h2>
-
-| Functions | Description |
-| --------- | ----- |
-| void DMAInit(DMA_Channel_TypeDef *DMAx, uint32_t peripheral_addr, uint32_t memory_addr, uint16_t data_count) | Configures the Direct Memory Access channel to transfer data between a peripheral and memory without CPU intervention. |
-
-## How to use
-> [!NOTE]
->- **Channel Mapping**: Each peripheral is tied to a specific DMA channel (e.g., USART1_TX is always DMA1 Channel 4 on STM32F103). Refer to the datasheet before initialization.
->- **Memory Alignment**: Ensure your source/destination buffers are properly aligned and volatile if they are modified in interrupts.
->- **CPU Efficiency**: Once started, the CPU is completely free to execute other tasks. Use DMA interrupt flags to detect when the transfer is complete.
-
-## Code Example: DMA (Memory to Peripheral)
-```C
-// Example: Transferring a buffer to USART1 via DMA
-uint8_t tx_buffer[] = "Hexapod Movement Data...";
-
-DMAInit(DMA1_Channel4, (uint32_t)&USART1->DR, (uint32_t)tx_buffer, sizeof(tx_buffer));
-
-// Start the transfer (depends on your implementation)
-DMA1_Channel4->CCR |= DMA_CCR_EN;
-```
-
----
-
-<h2 align=center>ADC</h2>
-
-| Functions | Description |
-| --------- | ----- |
-| void ADCInitMulti(Pin_t *pins, uint16_t count, uint8_t need_dma) | Initializes multiple ADC channels for a given array of pins. Includes optional DMA support for autonomous data collection from multiple sensors. |
-
-## How to use
-> [!NOTE]
->- **Scan Mode**: ADCInitMulti configures the ADC in scan mode, where it cycles through all specified channels automatically.
->- **DMA Integration**: When need_dma is enabled, the ADC triggers a DMA request after each conversion, moving the result directly into your memory buffer (sensorValues).
->- **Calibration**: It is recommended to run the internal ADC calibration (RSTCAL/CAL bits) during initialization to ensure maximum accuracy for your sensors.
-
-## Code Example: ADC with DMA
-```C
-// Define pins for tension sensors (potentiometers/strain gauges)
-Pin_t sensors[] = {PA0, PA1, PA2};
-uint16_t sensorValues[3];
-
-// Initialize 3 channels with DMA auto-transfer to our array
-ADCInitMulti(sensors, 3, 1);
-
-// Data in 'sensorValues' updates automatically in the background
-while(1) {
-    if (sensorValues[0] > 2000) {
-        // High tension detected on Leg 1!
-    }
-}
-```
-
----
-
-<h2 align=center>SOFT UART</h2>
-
-| Functions | Description |
-| --------- | ----- |
-| uint16_t softUartAvailable(void) | Returns the number of received bytes currently stored in the software buffer. Non-blocking check. |
-| char softUartReadByte(void) | Retrieves one byte from the software receive buffer. |
-| void softUartPutChar(char data) | Transmits a single character by manually toggling (bit-banging) the TX pin with precise timing. |
-| void softUartPutString(const char *data) | Sends a null-terminated string using the bit-banging transmission method. |
-| void softUartInit(Pin_t rx, Pin_t tx, uint32_t baud_rate) | Configures GPIO pins for RX/TX and sets up a timer to generate bit-interval interrupts for the specified baud rate. |
-
-## Hardware Constraints & Shared Access
-> [!IMPORTANT]
-> **Timer Resource Sharing:** > * **Occupied:** `TIM3` (Base) and `Channel 1` (dedicated to Soft UART bit-timing).
-> * **Available:** `TIM3` Channels 2, 3, and 4 can still be used for **PWM**.
-> * **Constraint:** All PWM signals on these channels will share the same frequency as the Soft UART sampling rate. Adjusting `ARR` or `PSC` for PWM will break the UART communication.
-
-## How to use
-> [!NOTE]
->- **Timer Dependency**: Soft UART relies on a hardware timer to maintain precise bit-timing. Ensure the timer used by the library doesn't conflict with your PWM or millis() timers.
->- **Baud Rate Limits**: Since this is "bit-banging", high baud rates (above 38400) may significantly increase CPU load due to high interrupt frequency. Best used for 9600 or 19200.
->- **Interrupt Priority**: For stable reception, the Soft UART timer interrupt should have a high priority to avoid bit-drifting during heavy processing.
-
-## Code Example: Soft UART
-```C
-// Initialize Soft UART on PB0 (RX) and PB1 (TX) at 9600 baud
-softUartInit(PB0, PB1, 9600);
-
-// Sending status from the glove
-softUartPutString("Glove MK2: Fingers calibrated.");
-
-// Receiving data
-if (softUartAvailable()) {
-    char cmd = softUartReadByte();
-    // Handle command...
-}
-```
-
----
-
-<h2 align=center>SOFT I2C</h2>
-
-| Functions | Description |
-| --------- | ----- |
-| void SoftI2C_Start(Pin_t sda, Pin_t scl) | Generates a START condition by pulling the SDA line low while SCL is high. Signals the beginning of a data transfer. |
-| void SoftI2C_Stop(Pin_t sda, Pin_t scl) | Generates a STOP condition by releasing the SDA line to high while SCL is high. Ends the current bus session. |
-| uint8_t SoftI2C_Write(Pin_t sda, Pin_t scl, uint8_t byte) | Transmits an 8-bit byte to the bus bit-by-bit. Returns the ACK/NACK bit received from the slave device. |
-| uint8_t SoftI2C_Read(Pin_t sda, Pin_t scl, uint8_t ack) | Receives an 8-bit byte from the slave and sends an ACK or NACK bit to control the data flow. |
-
-## How to use
-> [!NOTE]
->- **Pin Configuration**: Ensure the pins are configured as Open-Drain. Soft I2C relies on external or internal pull-up resistors.
->- **Timing**: This implementation uses software delays to match the I2C Standard Mode (~100kHz). CPU frequency affects the bus speed.
->- **Flexibility**: Unlike hardware I2C, Soft I2C can be initialized on any two GPIO pins, making it ideal for prototypes with complex routing.
-
-## Code Example: Soft I2C
-```C
-// Reading WHO_AM_I using bit-banging
-SoftI2C_Start(PA11, PA12);
-SoftI2C_Write(PA11, PA12, 0x68 << 1); // Device Address + W
-SoftI2C_Write(PA11, PA12, 0x75);      // Register Address
-SoftI2C_Start(PA11, PA12);            // Restart
-SoftI2C_Write(PA11, PA12, (0x68 << 1) | 1); // Device Address + R
-uint8_t id = SoftI2C_Read(PA11, PA12, 0);   // Read with NACK
-SoftI2C_Stop(PA11, PA12);
-```
+The library evolves together with the hardware projects that use it rather than attempting to reproduce the full STM32 vendor HAL.
