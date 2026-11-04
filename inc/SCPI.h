@@ -32,13 +32,12 @@ typedef struct{
 
 typedef struct{
     USART_TypeDef *USARTx;
-    uint32_t baud;
-    uint8_t parity;
-    uint8_t stop;
-    const SCPI_CommandDef *available_commands;
-    const uint8_t command_count;
-}SCPI_cfg;
+    uint16_t *uart_cfg_reg;
+    uint8_t uart_cfg_update;
 
+    const SCPI_CommandDef *available_commands;
+    uint16_t command_count;
+}SCPI_cfg;
 typedef enum{
     SCPI_ERR_NONE,
     SCPI_ERR_SYNTAX,

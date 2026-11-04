@@ -403,3 +403,24 @@ uint16_t MODBUS_CRC16(const uint8_t *nData, uint16_t wLength){
 	}
 	return wCRCWord;
 }
+
+
+void MODBUS_Stop(void){
+    if(!config) return;
+
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    config->timer->CR1 &= ~TIM_CR1_CEN;
+    config->timer->DIER &= ~TIM_DIER_UIE;
+    config->timer->SR &= ~TIM_SR_UIF;
+    config->timer->CNT = 0;
+
+    TIM_RegisterHandler(config->timer, NULL);
+
+    mb_frame.length = 0;
+    mb_frame.is_ready = 0;
+    mb_rx_busy = 0;
+
+    __set_PRIMASK(primask);
+}

@@ -3,9 +3,9 @@
 #include <ctype.h>
 #define SCPI_BUFFER_SIZE 128
 #define SCPI_QUEUE_SIZE 8
-#define SCPI_QUEUE_SIZE 8
+#define ARRAY_LEN(a) (sizeof(a)/sizeof((a)[0]))
 
-static SCPI_Error scpi_error = SCPI_ERR_NONE;
+static volatile SCPI_Error scpi_error = SCPI_ERR_NONE;
 static SCPI_ParsedCommand queue[SCPI_QUEUE_SIZE];
 static uint8_t queue_head = 0;
 static uint8_t queue_tail = 0;
@@ -17,6 +17,7 @@ static volatile uint8_t rx_ready = 0;
 static uint8_t rx_overflow = 0;
 
 static SCPI_cfg *config;
+static const uint32_t UART_SPEEDS[] = {9600, 19200, 38400, 57600, 115200};
 
 static void SCPI_RxCallback(UART_HandleTypeDef *huart, uint8_t byte){
     SCPI_FeedByte(byte);
@@ -24,17 +25,48 @@ static void SCPI_RxCallback(UART_HandleTypeDef *huart, uint8_t byte){
 
 
 static void SCPI_SetError(SCPI_Error error){
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
     if(scpi_error == SCPI_ERR_NONE){
         scpi_error = error;
     }
+
+    __set_PRIMASK(primask);
+}
+
+
+static void ReconfigureUARTCFG(void)
+{
+	uint8_t parity = (*config->uart_cfg_reg >> 4) & 0b11;
+	if (parity == 3) parity = 0;
+
+	uint8_t stop2_flag = (*config->uart_cfg_reg >> 6) & 0b1;
+
+	uint8_t parity_bit   = (parity != 0) ? 1 : 0;
+	uint8_t stop_bits    = stop2_flag ? 2 : 1;
+
+	uint16_t idx = *config->uart_cfg_reg & 0b1111;
+	if (idx >= ARRAY_LEN(UART_SPEEDS)) idx = 0;
+	uint32_t baud = UART_SPEEDS[idx];
+
+
+	USART_Init(config->USARTx, baud, parity, stop_bits);
 }
 
 
 void SCPI_Init(SCPI_cfg *cfg){
     config = cfg;
+    queue_head = 0;
+    queue_tail = 0;
+    queue_count = 0;
 
-    USART_Init(config->USARTx, config->baud, config->parity, config->stop);
+    rx_length = 0;
+    rx_ready = 0;
+    rx_overflow = 0;
+    scpi_error = SCPI_ERR_NONE;
 
+    ReconfigureUARTCFG();
     USART_SetHandlers(config->USARTx, SCPI_RxCallback, NULL, NULL);
 }
 
@@ -76,12 +108,17 @@ void SCPI_Process(void){
 
     char frame[SCPI_BUFFER_SIZE];
 
+    uint32_t primask = __get_PRIMASK();
     __disable_irq();
-    memcpy(frame, rx_buffer, rx_length);
-    frame[rx_length] = '\0';
+
+    uint16_t len = rx_length;
+    memcpy(frame, rx_buffer, len);
+    frame[len] = '\0';
+
     rx_length = 0;
     rx_ready = 0;
-    __enable_irq();
+
+    __set_PRIMASK(primask);
 
     char title[SCPI_BUFFER_SIZE] = "";
     char full[SCPI_BUFFER_SIZE];
@@ -129,6 +166,11 @@ void SCPI_Process(void){
 
         if(is_query) part[--len] = '\0';
 
+        if(!len){
+            SCPI_SetError(SCPI_ERR_SYNTAX);
+            return;
+        }
+
         // Нормализуем имя команды
         for(char *p = part; *p; p++){
             *p = (char)toupper((unsigned char)*p);
@@ -142,17 +184,20 @@ void SCPI_Process(void){
 
         char *command = absolute ? part + 1 : part;
 
-        if(!common && !absolute && title[0]){
-            strcpy(full, title);
-            strcat(full, ":");
-        }
+        size_t prefix_len = (!common && !absolute) ? strlen(title) : 0;
+        size_t command_len = strlen(command);
 
-        if(strlen(full) + strlen(command) >= sizeof(full)){
-        	SCPI_SetError(SCPI_ERR_OVERFLOW);
+        if(prefix_len + (prefix_len != 0) + command_len >= sizeof(full)){
+            SCPI_SetError(SCPI_ERR_OVERFLOW);
             return;
         }
 
-        strcat(full, command);
+        if(prefix_len){
+            memcpy(full, title, prefix_len);
+            full[prefix_len++] = ':';
+        }
+
+        memcpy(full + prefix_len, command, command_len + 1);
 
         // Обновляем контекст подсистемы
         if(!common){
@@ -188,12 +233,12 @@ void SCPI_Process(void){
 
         // Проверяем наличие аргумента
         if((def->argument == SCPI_ARG_REQUIRED && !has_value) || (def->argument == SCPI_ARG_NONE && has_value)){
-            sSCPI_SetError(SCPI_ERR_ARGUMENT);
+            SCPI_SetError(SCPI_ERR_ARGUMENT);
             return;
         }
 
         if(has_value && strlen(value) >= sizeof(queue[0].value)){
-        	SCPI_SetError(CPI_ERR_OVERFLOW);
+        	SCPI_SetError(SCPI_ERR_OVERFLOW);
             return;
         }
 
@@ -230,14 +275,18 @@ uint8_t SCPI_PopCommand(SCPI_ParsedCommand *cmd){
 }
 
 
+
+
 SCPI_Error SCPI_CheckError(void){
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
     SCPI_Error error = scpi_error;
     scpi_error = SCPI_ERR_NONE;
+
+    __set_PRIMASK(primask);
     return error;
 }
-
-
-
 
 void SCPI_Write(const char *data, uint16_t len){
     USART_WriteLine(config->USARTx, data, len);
