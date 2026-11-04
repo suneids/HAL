@@ -51,7 +51,7 @@ static void ReconfigureUARTCFG(void)
 	uint32_t baud = UART_SPEEDS[idx];
 
 
-	USART_Init(config->USARTx, baud, parity, stop_bits);
+	USART_Init(config->USARTx, baud, parity_bit, stop_bits);
 }
 
 

@@ -334,10 +334,9 @@ static void MODBUS_HandleWriteMultipleRegisters(void){
 	for(uint16_t i = 0; i < reg_count_req; i++){
 		uint16_t current_addr = start_addr + i;
 		uint16_t reg_val = (mb_active.data[5 + i * 2] << 8) | mb_active.data[6 + i * 2];
-		if(config->RegWriteAvailable && config->RegWriteAvailable(current_addr)){
-			if(!broadcast) MODBUS_SendException(MB_ERR_ADDRESS);
-			return;
-
+		if(config->RegWriteAvailable && !config->RegWriteAvailable(current_addr)){
+		    if(!broadcast) MODBUS_SendException(MB_ERR_ADDRESS);
+		    return;
 		}
 		uint8_t ex = 0;
 		if(config->validation_exti_func)

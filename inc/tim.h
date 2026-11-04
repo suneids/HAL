@@ -18,5 +18,7 @@ uint32_t RCC_GetHclk_Hz();
 uint32_t RCC_GetPclk1_Hz();
 uint32_t RCC_GetPclk2_Hz();
 uint32_t RCC_GetTIMPclk1_Hz();
-
+#if defined(STM32G0B1xx)
+	void Clock64MHz_FromHSE(void);
+#endif
 #endif
