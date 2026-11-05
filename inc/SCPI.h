@@ -56,4 +56,5 @@ void SCPI_Write(const char *data, uint16_t len);
 void SCPI_Process();
 uint8_t SCPI_PopCommand(SCPI_ParsedCommand *cmd);
 SCPI_Error SCPI_CheckError(void);
+void SCPI_SetError(SCPI_Error error);
 #endif

@@ -2,7 +2,6 @@
 #include "../inc/tim.h"
 #define COMMIT_DELAY_MS 1500
 #define COMMIT_MAX_HOLD_MS 30000
-#define ARRAY_LEN(a) (sizeof(a)/sizeof((a)[0]))
 
 static void MODBUS_RxCallback(UART_HandleTypeDef* huart, uint8_t byte);
 static void MODBUS_TxCallback(UART_HandleTypeDef* huart);
@@ -13,8 +12,6 @@ static void MODBUS_HandleWriteMultipleRegisters(void);
 static void MODBUS_SendException(uint8_t exception_code);
 static void ReconfigureUARTCFG();
 
-static const uint32_t UART_SPEEDS[] = {9600, 19200, 38400, 57600, 115200};
-
 static volatile  ModbusFrame_t mb_frame, mb_active;
 static Modbus_cfg *config;
 static volatile uint8_t mb_rx_busy = 0;
@@ -24,7 +21,7 @@ uint8_t MODBUS_IsBusy(void){
 }
 
 
-static void NV_MarkDirty(Modbus_cfg *cfg, uint32_t now_ms){
+void NV_MarkDirty(Modbus_cfg *cfg, uint32_t now_ms){
 	if(!cfg->nv_dirty){
 		cfg->nv_dirty = 1;
 		cfg->nv_first_dirty_ms = now_ms;
@@ -76,9 +73,9 @@ static void ReconfigureUARTCFG(void)
 	uint8_t stop_bits    = stop2_flag ? 2 : 1;
 	uint8_t bits_per_char = 1 + 8 + parity_bit + stop_bits;
 
-	uint16_t idx = *config->uart_cfg_reg & 0b1111;
-	if (idx >= ARRAY_LEN(UART_SPEEDS)) idx = 0;
-	uint32_t baud = UART_SPEEDS[idx];
+	uint16_t idx = *config->uart_cfg_reg & 0x0F;
+	if(idx >= baud_rates_count) idx = 0;
+	uint32_t baud = baud_rates[idx];
 
 	uint32_t t35_us;
 	if (baud > 19200u) {

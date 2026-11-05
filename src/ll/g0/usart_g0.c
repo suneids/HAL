@@ -4,6 +4,11 @@
 #include "../../../inc/tim.h"
 
 #if defined(STM32G0B1xx)
+const uint32_t baud_rates[] = {
+    9600, 19200, 38400, 57600, 115200
+};
+
+const uint8_t baud_rates_count = sizeof(baud_rates) / sizeof(baud_rates[0]);
 
 static void USART_RXHandler_Default(UART_HandleTypeDef* huart, uint8_t byte);
 static void USART_TXHandler_Default(UART_HandleTypeDef* huart);

@@ -45,4 +45,5 @@ void MODBUS_Process(void);
 uint16_t MODBUS_CRC16(const uint8_t *nData, uint16_t wLength);
 uint8_t NV_CommitTimerDue(Modbus_cfg *cfg, uint32_t now_ms);
 void MODBUS_Stop(void);
+void NV_MarkDirty(Modbus_cfg *cfg, uint32_t now_ms);
 #endif

@@ -6,6 +6,8 @@
 #define USART_BUFFER_SIZE 256
 #define USART_BUFFER_MASK (USART_BUFFER_SIZE - 1)
 
+extern const uint32_t baud_rates[];
+extern const uint8_t baud_rates_count;
 
 typedef struct UART_HandleTypeDef UART_HandleTypeDef;
 

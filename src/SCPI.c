@@ -3,7 +3,6 @@
 #include <ctype.h>
 #define SCPI_BUFFER_SIZE 128
 #define SCPI_QUEUE_SIZE 8
-#define ARRAY_LEN(a) (sizeof(a)/sizeof((a)[0]))
 
 static volatile SCPI_Error scpi_error = SCPI_ERR_NONE;
 static SCPI_ParsedCommand queue[SCPI_QUEUE_SIZE];
@@ -17,14 +16,13 @@ static volatile uint8_t rx_ready = 0;
 static uint8_t rx_overflow = 0;
 
 static SCPI_cfg *config;
-static const uint32_t UART_SPEEDS[] = {9600, 19200, 38400, 57600, 115200};
 
 static void SCPI_RxCallback(UART_HandleTypeDef *huart, uint8_t byte){
     SCPI_FeedByte(byte);
 }
 
 
-static void SCPI_SetError(SCPI_Error error){
+void SCPI_SetError(SCPI_Error error){
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
 
@@ -36,22 +34,20 @@ static void SCPI_SetError(SCPI_Error error){
 }
 
 
-static void ReconfigureUARTCFG(void)
-{
+static void ReconfigureUARTCFG(void){
 	uint8_t parity = (*config->uart_cfg_reg >> 4) & 0b11;
 	if (parity == 3) parity = 0;
 
 	uint8_t stop2_flag = (*config->uart_cfg_reg >> 6) & 0b1;
 
-	uint8_t parity_bit   = (parity != 0) ? 1 : 0;
 	uint8_t stop_bits    = stop2_flag ? 2 : 1;
 
-	uint16_t idx = *config->uart_cfg_reg & 0b1111;
-	if (idx >= ARRAY_LEN(UART_SPEEDS)) idx = 0;
-	uint32_t baud = UART_SPEEDS[idx];
+	uint16_t idx = *config->uart_cfg_reg & 0x0F;
+	if(idx >= baud_rates_count) idx = 0;
+	uint32_t baud = baud_rates[idx];
 
 
-	USART_Init(config->USARTx, baud, parity_bit, stop_bits);
+	USART_Init(config->USARTx, baud, parity, stop_bits);
 }
 
 
