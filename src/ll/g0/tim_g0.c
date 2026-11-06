@@ -76,10 +76,15 @@ void TIM_RegisterHandler(TIM_TypeDef *TIMx, TimHandler_t handler){
 }
 
 
-void TIM3_IRQHandler(void){
-	if(TIM3->SR & TIM_SR_UIF)   TIM3->SR &= ~TIM_SR_UIF;
-	if(tim_handlers[2] != NULL) tim_handlers[2]();
+void TIM3_TIM4_IRQHandler(void)
+{
+    if(TIM3->SR & TIM_SR_UIF)
+    {
+        TIM3->SR &= ~TIM_SR_UIF;
 
+        if(tim_handlers[2] != NULL)
+            tim_handlers[2]();
+    }
 }
 
 
@@ -151,4 +156,115 @@ uint32_t RCC_GetPclk2_Hz(void)
     return RCC_GetPclk1_Hz();
 }
 
+
+
+void Clock64MHz_FromHSE(void){
+    /*
+     * HSE = 8 MHz
+     *
+     * PLL input = 8 MHz / M1 = 8 MHz
+     * VCO       = 8 MHz * N24 = 192 MHz
+     * PLLR      = 192 MHz / R3 = 64 MHz -> SYSCLK
+     * PLLP      = 192 MHz / P8 = 24 MHz -> ADC source
+     *
+     * ADC:
+     * PLLPCLK / 2 = 12 MHz
+     */
+
+    /* 1) Тактирование PWR */
+    RCC->APBENR1 |= RCC_APBENR1_PWREN;
+    (void)RCC->APBENR1;
+
+    /*
+     * Voltage Range 1.
+     * Только Range 1 допускает SYSCLK до 64 MHz.
+     */
+    PWR->CR1 &= ~PWR_CR1_VOS;
+    PWR->CR1 |= PWR_CR1_VOS_0;       // VOS = 01, Range 1
+
+    while ((PWR->SR2 & PWR_SR2_VOSF) != 0U) {}
+
+    /* 2) Включить кварцевый HSE */
+    RCC->CR &= ~(RCC_CR_HSEBYP | RCC_CR_CSSON);
+    RCC->CR |= RCC_CR_HSEON;
+
+    while ((RCC->CR & RCC_CR_HSERDY) == 0U) {}
+
+    /*
+     * 3) Flash:
+     * 64 MHz в Range 1 требует 2 wait states.
+     */
+    FLASH->ACR &= ~(FLASH_ACR_LATENCY);
+    FLASH->ACR |= FLASH_ACR_LATENCY_2 | FLASH_ACR_PRFTEN | FLASH_ACR_ICEN;
+
+    while ((FLASH->ACR & FLASH_ACR_LATENCY) != FLASH_ACR_LATENCY_2) {}
+
+    /* 4) Остановить PLL перед настройкой */
+    RCC->CR &= ~RCC_CR_PLLON;
+
+    while ((RCC->CR & RCC_CR_PLLRDY) != 0U) {}
+
+    /*
+     * 5) Делители шин:
+     *
+     * SYSCLK = 64 MHz
+     * HCLK   = SYSCLK / 1 = 64 MHz
+     * PCLK   = HCLK   / 1 = 64 MHz
+     *
+     * У G0 один APB, отдельных APB1/APB2 нет.
+     * Нулевые значения HPRE и PPRE означают /1.
+     */
+    RCC->CFGR &= ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE);
+
+    /*
+     * 6) PLL:
+     *
+     * PLLSRC = HSE
+     * PLLM   = /1  -> код 0
+     * PLLN   = x24 -> код 24
+     * PLLP   = /8  -> код 7
+     * PLLR   = /3  -> код 2
+     */
+    RCC->PLLCFGR = RCC_PLLCFGR_PLLSRC_HSE | (0U  << RCC_PLLCFGR_PLLM_Pos)
+        | (24U << RCC_PLLCFGR_PLLN_Pos) | (7U  << RCC_PLLCFGR_PLLP_Pos)
+        | RCC_PLLCFGR_PLLPEN | (2U  << RCC_PLLCFGR_PLLR_Pos) | RCC_PLLCFGR_PLLREN;
+
+    /* 7) Включить PLL */
+    RCC->CR |= RCC_CR_PLLON;
+
+    while ((RCC->CR & RCC_CR_PLLRDY) == 0U) {}
+
+    /* 8) Переключить SYSCLK на PLLRCLK */
+    RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_PLLRCLK;
+
+    while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLLRCLK) {}
+
+    /*
+     * 9) Выбрать PLLPCLK как асинхронный источник ADC.
+     *
+     * ADCSEL:
+     * 00 = SYSCLK
+     * 01 = PLLPCLK
+     * 10 = HSI16
+     */
+    RCC->CCIPR = (RCC->CCIPR & ~RCC_CCIPR_ADCSEL) | RCC_CCIPR_ADCSEL_0;
+
+    /*
+     * Сам делитель ADC теперь находится не в RCC->CFGR,
+     * а в ADC1_COMMON->CCR.
+     *
+     * Для записи регистров ADC его тактирование должно быть включено.
+     */
+    RCC->APBENR2 |= RCC_APBENR2_ADCEN;
+    (void)RCC->APBENR2;
+
+    /* Асинхронный режим ADC: источник задаётся через RCC_CCIPR */
+    ADC1->CFGR2 &= ~ADC_CFGR2_CKMODE;
+
+    /* PLLPCLK 24 MHz / 2 = ADC clock 12 MHz */
+    ADC1_COMMON->CCR = (ADC1_COMMON->CCR & ~ADC_CCR_PRESC) | ADC_CCR_PRESC_0;
+
+    /* 10) Обновить CMSIS-переменную */
+    SystemCoreClockUpdate();
+}
 #endif

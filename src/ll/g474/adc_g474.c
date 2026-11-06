@@ -244,5 +244,4 @@ void ADC_Start(void){
 	ADC1->CR |= ADC_CR_ADSTART;
 }
 
-
 #endif

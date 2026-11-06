@@ -20,9 +20,7 @@ void DAC_Init(void){
      * external output
      * output buffer enabled
      */
-    DAC1->MCR &= ~(DAC_MCR_MODE1 |
-                   DAC_MCR_MODE2 |
-                   DAC_MCR_HFSEL);
+    DAC1->MCR &= ~(DAC_MCR_MODE1 | DAC_MCR_MODE2 | DAC_MCR_HFSEL);
 
 
     uint32_t hclk = RCC_GetHclk_Hz();
@@ -65,9 +63,7 @@ void DAC_WriteDual(uint16_t channel1, uint16_t channel2){
     if(channel1 > 4095u) channel1 = 4095u;
     if(channel2 > 4095u) channel2 = 4095u;
 
-    DAC1->DHR12RD =
-        ((uint32_t)channel2 << DAC_DHR12RD_DACC2DHR_Pos) |
-        ((uint32_t)channel1 << DAC_DHR12RD_DACC1DHR_Pos);
+    DAC1->DHR12RD = ((uint32_t)channel2 << DAC_DHR12RD_DACC2DHR_Pos) |  ((uint32_t)channel1 << DAC_DHR12RD_DACC1DHR_Pos);
 }
 
 #endif

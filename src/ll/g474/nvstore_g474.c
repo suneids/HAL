@@ -14,6 +14,7 @@
 
 /*
  * STM32G474 dual-bank:
+ * STM32G0B1:
  *
  * Flash page size       = 2048 bytes
  * Programming granule   = 8 bytes

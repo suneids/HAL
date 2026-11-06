@@ -26,14 +26,9 @@ static bool I2C_WaitUntilAny(I2C_TypeDef *I2Cx, uint32_t flags){
 
 
 static void I2C_ClearFlags(I2C_TypeDef *I2Cx){
-	I2Cx->ICR =
-			I2C_ICR_STOPCF   |
-			I2C_ICR_NACKCF   |
-			I2C_ICR_BERRCF   |
-			I2C_ICR_ARLOCF 	 |
-			I2C_ICR_OVRCF 	 |
-			I2C_ICR_TIMOUTCF |
-			I2C_ICR_ALERTCF;
+	I2Cx->ICR = I2C_ICR_STOPCF   | I2C_ICR_NACKCF   | I2C_ICR_BERRCF   |
+				I2C_ICR_ARLOCF 	 | I2C_ICR_OVRCF    | I2C_ICR_TIMOUTCF |
+				I2C_ICR_ALERTCF;
 }
 
 
@@ -94,17 +89,11 @@ static uint8_t I2C_GetAF(I2C_TypeDef *I2Cx, GPIO_Pin_t pin){
 
 	if(I2Cx == I2C1){
 
-		if(pin.port == GPIOA &&
-		  (pin.number == 13 ||
-		   pin.number == 14 ||
-		   pin.number == 15)){
+		if(pin.port == GPIOA && (pin.number == 13 || pin.number == 14 || pin.number == 15)){
 			return 4;
 		}
 
-		if(pin.port == GPIOB &&
-		  (pin.number == 7 ||
-		   pin.number == 8 ||
-		   pin.number == 9)){
+		if(pin.port == GPIOB && (pin.number == 7 || pin.number == 8 || pin.number == 9)){
 			return 4;
 		}
 	}
@@ -112,20 +101,15 @@ static uint8_t I2C_GetAF(I2C_TypeDef *I2Cx, GPIO_Pin_t pin){
 
 	if(I2Cx == I2C2){
 
-		if(pin.port == GPIOA &&
-		  (pin.number == 8 ||
-		   pin.number == 9 ||
-		   pin.number == 10)){
+		if(pin.port == GPIOA && (pin.number == 8 || pin.number == 9 || pin.number == 10)){
 			return 4;
 		}
 
-		if(pin.port == GPIOB &&
-		   pin.number == 12){
+		if(pin.port == GPIOB && pin.number == 12){
 			return 4;
 		}
 
-		if(pin.port == GPIOC &&
-		   pin.number == 4){
+		if(pin.port == GPIOC && pin.number == 4){
 			return 4;
 		}
 	}
@@ -133,26 +117,19 @@ static uint8_t I2C_GetAF(I2C_TypeDef *I2Cx, GPIO_Pin_t pin){
 
 	if(I2Cx == I2C3){
 
-		if(pin.port == GPIOA &&
-		  (pin.number == 8 ||
-		   pin.number == 9)){
+		if(pin.port == GPIOA && (pin.number == 8 || pin.number == 9)){
 			return 2;
 		}
 
-		if(pin.port == GPIOB &&
-		  (pin.number == 2)){
+		if(pin.port == GPIOB && (pin.number == 2)){
 			return 4;
 		}
 
-		if(pin.port == GPIOB &&
-		   pin.number == 5){
+		if(pin.port == GPIOB && pin.number == 5){
 			return 8;
 		}
 
-		if(pin.port == GPIOC &&
-		  (pin.number == 8 ||
-		   pin.number == 9 ||
-		   pin.number == 11)){
+		if(pin.port == GPIOC && (pin.number == 8 || pin.number == 9 || pin.number == 11)){
 			return 8;
 		}
 	}
@@ -160,25 +137,20 @@ static uint8_t I2C_GetAF(I2C_TypeDef *I2Cx, GPIO_Pin_t pin){
 
 	if(I2Cx == I2C4){
 
-		if(pin.port == GPIOA &&
-		  (pin.number == 13 ||
-		   pin.number == 14)){
+		if(pin.port == GPIOA &&(pin.number == 13 || pin.number == 14)){
 			return 3;
 		}
 
-		if(pin.port == GPIOB &&
-		   pin.number == 7){
+		if(pin.port == GPIOB && pin.number == 7){
 			return 3;
 		}
 
 		if(pin.port == GPIOC &&
-		  (pin.number == 6 ||
-		   pin.number == 7)){
+		  (pin.number == 6 || pin.number == 7)){
 			return 8;
 		}
 
-		if(pin.port == GPIOD &&
-		   pin.number == 11){
+		if(pin.port == GPIOD && pin.number == 11){
 			return 4;
 		}
 	}
@@ -188,9 +160,7 @@ static uint8_t I2C_GetAF(I2C_TypeDef *I2Cx, GPIO_Pin_t pin){
 }
 
 
-static bool I2C_GPIO_AF_Init(I2C_TypeDef *I2Cx,
-							 GPIO_Pin_t SDA,
-							 GPIO_Pin_t SCL){
+static bool I2C_GPIO_AF_Init(I2C_TypeDef *I2Cx, GPIO_Pin_t SDA, GPIO_Pin_t SCL){
 
 	uint8_t sda_af = I2C_GetAF(I2Cx, SDA);
 	uint8_t scl_af = I2C_GetAF(I2Cx, SCL);
@@ -287,7 +257,6 @@ void I2C_Init(I2C_TypeDef *I2Cx,
 	I2Cx->TIMINGR = I2C_TIMING_100KHZ;
 
 	I2Cx->CR1 = 0;
-
 	I2C_ClearFlags(I2Cx);
 
 	I2Cx->CR1 |= I2C_CR1_PE;

@@ -78,10 +78,8 @@ static void DMA_SetRequest(DMA_Channel_TypeDef *DMAx, uint32_t request){
 
 	request &= DMAMUX_CxCR_DMAREQ_ID_Msk;
 
-	volatile DMAMUX_Channel_TypeDef *mux =
-		(volatile DMAMUX_Channel_TypeDef *)
-		(DMAMUX1_Channel0_BASE +
-		 index * sizeof(DMAMUX_Channel_TypeDef));
+	volatile DMAMUX_Channel_TypeDef *mux = (volatile DMAMUX_Channel_TypeDef *) (DMAMUX1_Channel0_BASE 
+											+ index * sizeof(DMAMUX_Channel_TypeDef));
 
 	mux->CCR = request;
 }
@@ -98,16 +96,9 @@ static void DMA_ClearFlags(DMA_Channel_TypeDef *DMAx){
 }
 
 
-void DMA_Init(DMA_Channel_TypeDef *DMAx,
-			  uint32_t peripheral_addr,
-			  uint32_t memory_addr,
-			  uint16_t data_count){
+void DMA_Init(DMA_Channel_TypeDef *DMAx, uint32_t peripheral_addr, uint32_t memory_addr, uint16_t data_count){
 
-	if(DMAx == NULL ||
-	   peripheral_addr == 0 ||
-	   memory_addr == 0 ||
-	   data_count == 0){
-
+	if(DMAx == NULL || peripheral_addr == 0 || memory_addr == 0 || data_count == 0){
 		return;
 	}
 
@@ -143,14 +134,8 @@ void DMA_Init(DMA_Channel_TypeDef *DMAx,
 	DMAx->CNDTR = data_count;
 
 
-	DMAx->CCR =
-			DMA_CCR_MINC    |
-			DMA_CCR_CIRC    |
-			DMA_CCR_MSIZE_0 |
-			DMA_CCR_PSIZE_0 |
-			DMA_CCR_PL_0;
-
-
+	DMAx->CCR = DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_MSIZE_0 |
+				DMA_CCR_PSIZE_0 | DMA_CCR_PL_0;
 	DMAx->CCR |= DMA_CCR_EN;
 }
 

@@ -1,6 +1,5 @@
-#ifndef FLASH_LL_H
-#define FLASH_LL_H
-
+#ifndef FLASH_LL_F103C6T6
+#define FLASH_LL_F103C6T6
 #include "mcu_config.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -32,5 +31,4 @@ int flash_ll_read_halfword(
 );
 
 #endif
-
 #endif

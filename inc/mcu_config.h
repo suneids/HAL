@@ -2,12 +2,15 @@
 #define MCU_CONFIG
 #include <stdint.h>
 
+
+
 #if defined(STM32F103C6Tx)
 
 	#define NV_PAGE_SIZE 1024u
 	#define SYS_CLK_HZ 72000000
 	#define HSI_VALUE 8000000u
 	#define HSE_VALUE 8000000u
+	#define NV_PAGE_SIZE 1024u
 	#define STM32F103x6 1
 	#include "../ST/f103/stm32f1xx.h"
 

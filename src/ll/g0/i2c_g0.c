@@ -258,8 +258,8 @@ uint8_t I2C_Read_Burst(I2C_TypeDef *I2Cx, uint8_t devAddr, uint8_t regAddr, uint
 	if(pBuffer == 0 || size == 0 || size > 255) return false;
 
 	if(regAddr == I2C_NO_REG){
-		I2C_ReadRaw(I2Cx, devAddr, pBuffer, size);
-		return false;
+
+		return I2C_ReadRaw(I2Cx, devAddr, pBuffer, size);
 	}
 
 	if(!I2C_WriteRegNoStop(I2Cx, devAddr, regAddr)) return false;

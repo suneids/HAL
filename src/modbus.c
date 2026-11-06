@@ -2,7 +2,6 @@
 #include "../inc/tim.h"
 #define COMMIT_DELAY_MS 1500
 #define COMMIT_MAX_HOLD_MS 30000
-#define ARRAY_LEN(a) (sizeof(a)/sizeof((a)[0]))
 
 static void MODBUS_RxCallback(UART_HandleTypeDef* huart, uint8_t byte);
 static void MODBUS_TxCallback(UART_HandleTypeDef* huart);
@@ -13,8 +12,6 @@ static void MODBUS_HandleWriteMultipleRegisters(void);
 static void MODBUS_SendException(uint8_t exception_code);
 static void ReconfigureUARTCFG();
 
-static const uint32_t UART_SPEEDS[] = {9600, 19200, 38400, 57600, 115200};
-
 static volatile  ModbusFrame_t mb_frame, mb_active;
 static Modbus_cfg *config;
 static volatile uint8_t mb_rx_busy = 0;
@@ -24,7 +21,7 @@ uint8_t MODBUS_IsBusy(void){
 }
 
 
-static void NV_MarkDirty(Modbus_cfg *cfg, uint32_t now_ms){
+void NV_MarkDirty(Modbus_cfg *cfg, uint32_t now_ms){
 	if(!cfg->nv_dirty){
 		cfg->nv_dirty = 1;
 		cfg->nv_first_dirty_ms = now_ms;
@@ -53,8 +50,14 @@ void MODBUS_Init(Modbus_cfg *cfg){
 
 	TIM_RegisterHandler(config->timer, MODBUS_Timer_IRQHandler);
 
-	if(config->timer == TIM2) NVIC_EnableIRQ(TIM2_IRQn);
-	//else if(config->timer == TIM3) NVIC_EnableIRQ(TIM3_IRQn);
+	if(config->timer == TIM2) {
+	    NVIC_ClearPendingIRQ(TIM2_IRQn);
+	    NVIC_EnableIRQ(TIM2_IRQn);
+	}
+	else if(config->timer == TIM3) {
+	    NVIC_ClearPendingIRQ(TIM3_TIM4_IRQn);
+	    NVIC_EnableIRQ(TIM3_TIM4_IRQn);
+	}
 
 }
 
@@ -70,9 +73,9 @@ static void ReconfigureUARTCFG(void)
 	uint8_t stop_bits    = stop2_flag ? 2 : 1;
 	uint8_t bits_per_char = 1 + 8 + parity_bit + stop_bits;
 
-	uint16_t idx = *config->uart_cfg_reg & 0b1111;
-	if (idx >= ARRAY_LEN(UART_SPEEDS)) idx = 0;
-	uint32_t baud = UART_SPEEDS[idx];
+	uint16_t idx = *config->uart_cfg_reg & 0x0F;
+	if(idx >= baud_rates_count) idx = 0;
+	uint32_t baud = baud_rates[idx];
 
 	uint32_t t35_us;
 	if (baud > 19200u) {
@@ -89,6 +92,8 @@ static void ReconfigureUARTCFG(void)
 
 	USART_Init(config->USARTx, baud, parity, stop_bits);
 	TIM_Init(config->timer, psc, (uint16_t)(t35_us - 1u), 0);
+	config->timer->SR &= ~TIM_SR_UIF;
+	config->timer->DIER |= TIM_DIER_UIE;
 }
 
 
@@ -326,10 +331,9 @@ static void MODBUS_HandleWriteMultipleRegisters(void){
 	for(uint16_t i = 0; i < reg_count_req; i++){
 		uint16_t current_addr = start_addr + i;
 		uint16_t reg_val = (mb_active.data[5 + i * 2] << 8) | mb_active.data[6 + i * 2];
-		if(config->RegWriteAvailable && config->RegWriteAvailable(current_addr)){
-			if(!broadcast) MODBUS_SendException(MB_ERR_ADDRESS);
-			return;
-
+		if(config->RegWriteAvailable && !config->RegWriteAvailable(current_addr)){
+		    if(!broadcast) MODBUS_SendException(MB_ERR_ADDRESS);
+		    return;
 		}
 		uint8_t ex = 0;
 		if(config->validation_exti_func)
@@ -394,4 +398,25 @@ uint16_t MODBUS_CRC16(const uint8_t *nData, uint16_t wLength){
 		}
 	}
 	return wCRCWord;
+}
+
+
+void MODBUS_Stop(void){
+    if(!config) return;
+
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    config->timer->CR1 &= ~TIM_CR1_CEN;
+    config->timer->DIER &= ~TIM_DIER_UIE;
+    config->timer->SR &= ~TIM_SR_UIF;
+    config->timer->CNT = 0;
+
+    TIM_RegisterHandler(config->timer, NULL);
+
+    mb_frame.length = 0;
+    mb_frame.is_ready = 0;
+    mb_rx_busy = 0;
+
+    __set_PRIMASK(primask);
 }

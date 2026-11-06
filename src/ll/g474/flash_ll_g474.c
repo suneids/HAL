@@ -288,23 +288,19 @@ int flash_ll_program_doubleword(uint32_t addr, uint64_t data){
 
 		FLASH->CR |= FLASH_CR_PG;
 
-		*(volatile uint32_t *)addr =
-			(uint32_t)data;
+		*(volatile uint32_t *)addr = (uint32_t)data;
 
 		__ISB();
 
-		*(volatile uint32_t *)(addr + 4u) =
-			(uint32_t)(data >> 32u);
+		*(volatile uint32_t *)(addr + 4u) = (uint32_t)(data >> 32u);
 
 		if(flash_wait_ready() != 0){
 			break;
 		}
 
-		uint32_t read_low =
-			*(volatile const uint32_t *)addr;
+		uint32_t read_low = *(volatile const uint32_t *)addr;
 
-		uint32_t read_high =
-			*(volatile const uint32_t *)(addr + 4u);
+		uint32_t read_high = *(volatile const uint32_t *)(addr + 4u);
 
 		if(read_low != (uint32_t)data){
 			break;

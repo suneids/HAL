@@ -121,8 +121,7 @@ static uint8_t FDCAN_PinInit(FDCAN_GlobalTypeDef *FDCANx)
 }
 
 
-static uint32_t FDCAN_GetRamBase(FDCAN_GlobalTypeDef *FDCANx)
-{
+static uint32_t FDCAN_GetRamBase(FDCAN_GlobalTypeDef *FDCANx){
     uint32_t base = SRAMCAN_BASE;
 
     if(FDCANx == FDCAN2){
@@ -160,8 +159,7 @@ static uint8_t FDCAN_WaitClear(volatile uint32_t *reg, uint32_t mask){
 }
 
 
-static uint8_t FDCAN_IsValid(FDCAN_GlobalTypeDef *FDCANx)
-{
+static uint8_t FDCAN_IsValid(FDCAN_GlobalTypeDef *FDCANx){
     if(FDCANx == FDCAN1) return 1;
     if(FDCANx == FDCAN2) return 1;
     if(FDCANx == FDCAN3) return 1;
@@ -350,11 +348,7 @@ uint8_t FDCAN_Init(FDCAN_GlobalTypeDef *FDCANx, uint32_t bitrate){
 
 // ---------- SEND ----------
 
-uint8_t FDCAN_Send(FDCAN_GlobalTypeDef *FDCANx,
-                   uint32_t id,
-                   const uint8_t *data,
-                   uint8_t len)
-{
+uint8_t FDCAN_Send(FDCAN_GlobalTypeDef *FDCANx, uint32_t id, const uint8_t *data, uint8_t len){
     if(!FDCAN_IsValid(FDCANx))       return 0;
     if(id > 0x7FFu)                  return 0;
     if(len > 8u)                     return 0;

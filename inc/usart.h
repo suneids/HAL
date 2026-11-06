@@ -6,6 +6,8 @@
 #define USART_BUFFER_SIZE 256
 #define USART_BUFFER_MASK (USART_BUFFER_SIZE - 1)
 
+extern const uint32_t baud_rates[];
+extern const uint8_t baud_rates_count;
 
 typedef struct UART_HandleTypeDef UART_HandleTypeDef;
 
@@ -41,4 +43,5 @@ void USART_IRQHandler_Shared(UART_HandleTypeDef *huart);
 
 uint32_t USART_BrrCalc(uint32_t pclk, uint32_t baud);
 uint8_t USART_Index(USART_TypeDef *USARTx);
+uint8_t USART_TakeRxError(USART_TypeDef *USARTx);
 #endif

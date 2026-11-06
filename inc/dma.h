@@ -6,5 +6,5 @@ void DMA_Init(DMA_Channel_TypeDef *DMAx, uint32_t peripheral_addr, uint32_t memo
 void SPI1_DMA_TX_Init();
 void SPI1_DMA_TX_Start(const uint8_t *buf, uint16_t len);
 void SPI1_DMA_TX_Stop();
-uint8_t DMA_IsReady();
+uint8_t DMA_IsReady(DMA_Channel_TypeDef *DMAx);
 #endif
