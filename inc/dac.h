@@ -1,5 +1,5 @@
 #include "mcu_config.h"
-#if defined(STM32G0B1xx)
+#if defined(STM32G0B1xx) || defined(STM32G474xx)
 #ifndef DAC_H_
 #define DAC_H_
 #define DAC_MAX_VALUE 4095u

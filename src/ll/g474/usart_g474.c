@@ -3,7 +3,7 @@
 #include "../../../inc/gpio.h"
 #include "../../../inc/tim.h"
 
-#if defined(DSTM32G474CEUx)
+#if defined(STM32G474xx)
 
 static void USART_RXHandler_Default(UART_HandleTypeDef* huart, uint8_t byte);
 static void USART_TXHandler_Default(UART_HandleTypeDef* huart);
@@ -15,63 +15,113 @@ volatile char usartRXBuffers[2][USART_BUFFER_SIZE] = {{ 0 }}, usartTXBuffers[2][
 static UART_HandleTypeDef huart1 = {USART1, NULL, USART_RXHandler_Default, USART_TXHandler_Default, 0};
 static UART_HandleTypeDef huart2 = {USART2, NULL, USART_RXHandler_Default, USART_TXHandler_Default, 1};
 
-void USART_Init(USART_TypeDef *USARTx, uint32_t  baud_rate, uint8_t parity, uint8_t stop_bits){
-	GPIO_Pin_t tx = {.port = GPIOA, .moder = GPIO_MODE_AF, .otype = GPIO_OTYPE_PP,
-					 .pull = GPIO_NOPULL, .speed = GPIO_SPEED_HIGH, .af = 1},
-			   rx = {.port = GPIOA,  .moder = GPIO_MODE_AF, .otype = GPIO_OTYPE_PP,
-					 .pull = GPIO_PULLUP, .speed = GPIO_SPEED_HIGH, .af = 1};
-	switch((uintptr_t)USARTx){
-		case (uintptr_t)USART1:{
-			RCC->APBENR2 |= RCC_APBENR2_USART1EN;
-			tx.number = 9;
-			rx.number = 10;
-			GPIO_PinMode(tx);
-			GPIO_PinMode(rx);
-			NVIC_EnableIRQ(USART1_IRQn);
-			break;
-		}
-		case (uintptr_t)USART2:{
-			RCC->APBENR1 |= RCC_APBENR1_USART2EN;
-			tx.number = 2;
-			rx.number = 3;
-			GPIO_PinMode(tx);
-			GPIO_PinMode(rx);
-			NVIC_EnableIRQ(USART2_LPUART2_IRQn);
-			break;
-		}
-		default: return;
+void USART_Init(USART_TypeDef *USARTx, uint32_t baud_rate, uint8_t parity, uint8_t stop_bits){
+	if(baud_rate == 0u) return;
+	GPIO_Pin_t tx = {
+		.port  = GPIOA,
+		.moder = GPIO_MODE_AF,
+		.otype = GPIO_OTYPE_PP,
+		.pull  = GPIO_NOPULL,
+		.speed = GPIO_SPEED_HIGH,
+		.af    = 7
+	};
+	GPIO_Pin_t rx = {
+		.port  = GPIOA,
+		.moder = GPIO_MODE_AF,
+		.otype = GPIO_OTYPE_PP,
+		.pull  = GPIO_PULLUP,
+		.speed = GPIO_SPEED_HIGH,
+		.af    = 7
+	};
+	uint32_t pclk;
+
+	if(USARTx == USART1){
+		/*
+		 * USART1 kernel clock = PCLK2
+		 * USART1SEL = 00
+		 */
+		RCC->CCIPR &= ~RCC_CCIPR_USART1SEL;
+		RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
+		tx.number = 9;
+		rx.number = 10;
+		pclk = RCC_GetPclk2_Hz();
+		NVIC_EnableIRQ(USART1_IRQn);
 	}
-	USARTx->CR1 &= ~(USART_CR1_UE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PCE |
-				 	 USART_CR1_PS | USART_CR1_M0 | USART_CR1_M1);
+	else if(USARTx == USART2){
+		/*
+		 * USART2 kernel clock = PCLK1
+		 * USART2SEL = 00
+		 */
+		RCC->CCIPR &= ~RCC_CCIPR_USART2SEL;
+		RCC->APB1ENR1 |= RCC_APB1ENR1_USART2EN;
+		tx.number = 2;
+		rx.number = 3;
+		pclk = RCC_GetPclk1_Hz();
+		NVIC_EnableIRQ(USART2_IRQn);
+	}
+	else if(USARTx == USART3){
 
-	if (USARTx->ISR & USART_ISR_RXNE_RXFNE) (uint8_t)USARTx->RDR;
+	    /*
+	     * USART3 kernel clock = PCLK1
+	     * USART3SEL = 00
+	     * TX = PB10, RX = PB11, AF7
+	     */
+
+	    RCC->CCIPR &= ~RCC_CCIPR_USART3SEL;
+	    RCC->APB1ENR1 |= RCC_APB1ENR1_USART3EN;
+
+	    tx.port = GPIOB;
+	    tx.number = 10;
+
+	    rx.port = GPIOB;
+	    rx.number = 11;
+
+	    pclk = RCC_GetPclk1_Hz();
+
+	    NVIC_EnableIRQ(USART3_IRQn);
+	}
+	else{
+		return;
+	}
+	GPIO_PinMode(tx);
+	GPIO_PinMode(rx);
+	USARTx->CR1 &= ~USART_CR1_UE;
+	/*
+	 * Наш BRR рассчитан для:
+	 *
+	 * prescaler  = /1
+	 * oversample = 16
+	 */
+	USARTx->PRESC = 0u;
+	USARTx->CR1 &= ~(USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PCE |
+					 USART_CR1_PS | USART_CR1_M0 | USART_CR1_M1 |
+					 USART_CR1_OVER8 | USART_CR1_FIFOEN);
+	if(USARTx->ISR & USART_ISR_RXNE_RXFNE) (void)USARTx->RDR;
 	if(USARTx->ISR & USART_ISR_ORE) USARTx->ICR = USART_ICR_ORECF;
-
 	if(!parity){
 		// 8N1
 		USARTx->CR1 &= ~USART_CR1_PCE;
 		USARTx->CR1 &= ~(USART_CR1_M0 | USART_CR1_M1);
-	}else{
-		//8E1 8O1
+	}
+	else{
+		// 8E1 / 8O1
 		USARTx->CR1 |= USART_CR1_PCE;
+		/*
+		 * 9-bit frame:
+		 * 8 data + parity
+		 */
 		USARTx->CR1 &= ~USART_CR1_M1;
 		USARTx->CR1 |= USART_CR1_M0;
-
-		if(parity == 2){
-			USARTx->CR1 |= USART_CR1_PS; // Odd
-		}
-		else{
-			USARTx->CR1 &= ~USART_CR1_PS; // Even
-		}
+		if(parity == 2) USARTx->CR1 |= USART_CR1_PS;
+		else 			USARTx->CR1 &= ~USART_CR1_PS;
 	}
-
 	USARTx->CR2 &= ~USART_CR2_STOP;
 	if(stop_bits == 2) USARTx->CR2 |= (0b10u << USART_CR2_STOP_Pos);
-
-	uint32_t pclk = RCC_GetPclk1_Hz();
 	USARTx->BRR = USART_BrrCalc(pclk, baud_rate);
 
-	USARTx->CR1 |= USART_CR1_UE | USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE;
+
+	USARTx->CR1 |= USART_CR1_UE | USART_CR1_TE |
+				   USART_CR1_RE | USART_CR1_RXNEIE_RXFNEIE;
 }
 
 
@@ -184,7 +234,7 @@ void USART1_IRQHandler(void){
 }
 
 
-void USART2_LPUART2_IRQHandler(void){
+void USART2_IRQHandler(void){
 	USART_IRQHandler_Shared(&huart2);
 }
 
@@ -226,14 +276,8 @@ void USART_IRQHandler_Shared(UART_HandleTypeDef *huart){
 
 
 uint32_t USART_BrrCalc(uint32_t pclk, uint32_t baud){
-	uint32_t div16 =  (pclk + (baud / 2u)) / baud;
-	uint32_t mant = div16 / 16u;
-	uint32_t frac = div16 % 16u;
-	if(frac > 15u){
-		frac = 0;
-		mant++;
-	}
-	return (mant << 4) | (frac & 0xFu);
+	if(baud == 0u) return 0u;
+	return (pclk + baud / 2u) / baud;
 }
 
 #endif

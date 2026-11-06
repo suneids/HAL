@@ -1,40 +1,53 @@
 #include "../../../inc/flash_ll.h"
 #include <stdint.h>
-#if defined(DSTM32G474CEUx)
+#if defined(STM32G474xx)
 #define FLASH_LL_KEY1  0x45670123UL
 #define FLASH_LL_KEY2  0xCDEF89ABUL
-#define FLASH_LL_PAGE_SIZE  2048u
 
 #define FLASH_LL_ERROR_MASK ( \
-	FLASH_SR_OPERR   |          \
-	FLASH_SR_PROGERR |          \
-	FLASH_SR_WRPERR  |          \
-	FLASH_SR_PGAERR  |          \
-	FLASH_SR_SIZERR  |          \
-	FLASH_SR_PGSERR  |          \
-	FLASH_SR_MISERR  |          \
-	FLASH_SR_FASTERR |          \
-	FLASH_SR_RDERR              \
+    FLASH_SR_OPERR   |          \
+    FLASH_SR_PROGERR |          \
+    FLASH_SR_WRPERR  |          \
+    FLASH_SR_PGAERR  |          \
+    FLASH_SR_SIZERR  |          \
+    FLASH_SR_PGSERR  |          \
+    FLASH_SR_MISERR  |          \
+    FLASH_SR_FASTERR |          \
+    FLASH_SR_RDERR   |          \
+    FLASH_SR_OPTVERR            \
 )
 
 
 static int flash_wait_ready(void){
-	/*
-	 * В заголовочнике G0B1 определены оба флага,
-	 * даже если в конкретном корпусе используется только Bank 1.
-	 */
-	while((FLASH->SR & (FLASH_SR_BSY1 | FLASH_SR_BSY2)) != 0u){
+
+	while((FLASH->SR & FLASH_SR_BSY) != 0u){
 	}
 
-	/* Ожидание завершения изменения управляющего регистра */
-	while((FLASH->SR & FLASH_SR_CFGBSY) != 0u){
-	}
+	uint32_t errors =
+		FLASH->SR & FLASH_LL_ERROR_MASK;
 
-	if((FLASH->SR & FLASH_LL_ERROR_MASK) != 0u){
+	if(errors != 0u){
+		FLASH->SR = errors;
 		return -1;
 	}
 
+	if(FLASH->SR & FLASH_SR_EOP){
+		FLASH->SR = FLASH_SR_EOP;
+	}
+
 	return 0;
+}
+
+
+static uint32_t flash_get_size(void){
+	uint32_t size_kb =
+		*(volatile const uint16_t *)FLASHSIZE_BASE;
+
+	if(size_kb == 0u || size_kb == 0xFFFFu){
+		return 0u;
+	}
+
+	return size_kb * 1024u;
 }
 
 
@@ -76,89 +89,175 @@ int flash_ll_lock(void){
 	return ((FLASH->CR & FLASH_CR_LOCK) != 0u) ? 0 : -1;
 }
 
+static uint8_t flash_disable_dcache(void){
+
+	if(FLASH->ACR & FLASH_ACR_DCEN){
+
+		FLASH->ACR &= ~FLASH_ACR_DCEN;
+		return 1u;
+	}
+
+	return 0u;
+}
+
+
+static void flash_restore_dcache(uint8_t was_enabled){
+
+	if(!was_enabled){
+		return;
+	}
+
+	FLASH->ACR |= FLASH_ACR_DCRST;
+	FLASH->ACR &= ~FLASH_ACR_DCRST;
+
+	FLASH->ACR |= FLASH_ACR_DCEN;
+}
+
+
+static void flash_flush_icache(void){
+
+	if((FLASH->ACR & FLASH_ACR_ICEN) == 0u){
+		return;
+	}
+
+	FLASH->ACR &= ~FLASH_ACR_ICEN;
+
+	FLASH->ACR |= FLASH_ACR_ICRST;
+	FLASH->ACR &= ~FLASH_ACR_ICRST;
+
+	FLASH->ACR |= FLASH_ACR_ICEN;
+}
+
 
 int flash_ll_erase_page(uint32_t page_addr){
-	/* Проверка попадания во Flash */
-	if(page_addr < FLASH_BASE){
+
+	uint32_t flash_size = flash_get_size();
+
+	if(flash_size == 0u){
 		return -1;
 	}
 
-	if(page_addr >= (FLASH_BASE + FLASH_SIZE)){
-		return -1;
-	}
+    if(page_addr < FLASH_BASE){
+        return -1;
+    }
 
-	/* Адрес должен указывать на начало страницы 2 Кбайт */
-	if(((page_addr - FLASH_BASE) % FLASH_LL_PAGE_SIZE) != 0u){
-		return -1;
-	}
+    if(page_addr >= (FLASH_BASE + flash_size)){
+        return -1;
+    }
 
-	/*
-	 * Для STM32G0B1CBT6:
-	 *
-	 * Flash = 128 Кбайт
-	 * Page  = 2 Кбайт
-	 * Pages = 64
-	 * Номера страниц: 0...63
-	 */
-	uint32_t page =
-		(page_addr - FLASH_BASE) / FLASH_LL_PAGE_SIZE;
 
-	uint32_t primask = __get_PRIMASK();
-	__disable_irq();
+    uint8_t dual_bank =
+        (FLASH->OPTR & FLASH_OPTR_DBANK) ? 1u : 0u;
 
-	int result = -1;
+    uint32_t page_size;
+    uint32_t page;
+    uint32_t bank_bit = 0u;
 
-	do{
-		if(flash_wait_ready() != 0){
-			break;
-		}
 
-		flash_clear_flags();
+    if(dual_bank){
 
-		/*
-		 * Стереть старую конфигурацию операции.
-		 *
-		 * BKER = 0: Bank 1.
-		 */
-		FLASH->CR &= ~(FLASH_CR_PER |
-		               FLASH_CR_PNB |
-		               FLASH_CR_BKER);
+        page_size = 2048u;
 
-		/* Выбрать страницу и режим page erase */
-		FLASH->CR |=
-			  FLASH_CR_PER
-			| (page << FLASH_CR_PNB_Pos);
+        if(((page_addr - FLASH_BASE) % page_size) != 0u){
+            return -1;
+        }
 
-		/* Запустить стирание */
-		FLASH->CR |= FLASH_CR_STRT;
+        uint32_t bank_size = flash_size / 2u;
+        uint32_t bank2_addr = FLASH_BASE + bank_size;
 
-		if(flash_wait_ready() != 0){
-			break;
-		}
+        if(page_addr >= bank2_addr){
 
-		result = 0;
-	}
-	while(0);
+            page =
+                (page_addr - bank2_addr) / page_size;
 
-	/* Убрать настройки стирания */
-	FLASH->CR &= ~(FLASH_CR_PER |
-	               FLASH_CR_PNB |
-	               FLASH_CR_BKER);
+            bank_bit = FLASH_CR_BKER;
+        }
+        else{
 
-	flash_clear_flags();
+            page =
+                (page_addr - FLASH_BASE) / page_size;
 
-	/* Восстановить прежнее состояние IRQ */
-	__set_PRIMASK(primask);
+            bank_bit = 0u;
+        }
+    }
+    else{
 
-	return result;
+        /*
+         * Single-bank:
+         * 128-bit organization
+         * page = 4 KB
+         */
+        page_size = 4096u;
+
+        if(((page_addr - FLASH_BASE) % page_size) != 0u){
+            return -1;
+        }
+
+        page =
+            (page_addr - FLASH_BASE) / page_size;
+
+        bank_bit = 0u;
+    }
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    uint8_t dcache_enabled = 0u;
+
+    int result = -1;
+    do{
+
+    	if(flash_wait_ready() != 0){
+    		break;
+    	}
+
+    	dcache_enabled = flash_disable_dcache();
+
+    	flash_clear_flags();
+
+    	FLASH->CR &= ~(FLASH_CR_PER |
+    				   FLASH_CR_PNB |
+    				   FLASH_CR_BKER);
+
+    	FLASH->CR |=
+    		  FLASH_CR_PER
+    		| ((page << FLASH_CR_PNB_Pos) & FLASH_CR_PNB)
+    		| bank_bit;
+
+    	FLASH->CR |= FLASH_CR_STRT;
+
+    	if(flash_wait_ready() != 0){
+    		break;
+    	}
+
+    	result = 0;
+    }
+    while(0);
+
+    FLASH->CR &= ~(FLASH_CR_PER |
+    			   FLASH_CR_PNB |
+    			   FLASH_CR_BKER);
+
+    flash_clear_flags();
+
+    flash_restore_dcache(dcache_enabled);
+    flash_flush_icache();
+
+    __set_PRIMASK(primask);
+
+    return result;
 }
 
 
 /*
- * STM32G0 записывает обычным режимом только doubleword:
- * 64 бита, адрес кратен восьми.
+ * STM32G4 программируется doubleword:
+ * 64 бита, адрес кратен 8 байтам.
  */
+
 int flash_ll_program_doubleword(uint32_t addr, uint64_t data){
+	uint32_t flash_size = flash_get_size();
+
+	if(flash_size == 0u){
+		return -1;
+	}
 	if((addr & 0x7u) != 0u){
 		return -1;
 	}
@@ -167,12 +266,14 @@ int flash_ll_program_doubleword(uint32_t addr, uint64_t data){
 		return -1;
 	}
 
-	if(addr > (FLASH_BASE + FLASH_SIZE - 8u)){
+	if(addr > (FLASH_BASE + flash_size - 8u)){
 		return -1;
 	}
 
 	uint32_t primask = __get_PRIMASK();
 	__disable_irq();
+
+	uint8_t dcache_enabled = 0u;
 
 	int result = -1;
 
@@ -181,15 +282,12 @@ int flash_ll_program_doubleword(uint32_t addr, uint64_t data){
 			break;
 		}
 
+		dcache_enabled = flash_disable_dcache();
+
 		flash_clear_flags();
 
 		FLASH->CR |= FLASH_CR_PG;
 
-		/*
-		 * Порядок обязателен:
-		 * сначала младшие 32 бита,
-		 * затем старшие 32 бита.
-		 */
 		*(volatile uint32_t *)addr =
 			(uint32_t)data;
 
@@ -224,6 +322,8 @@ int flash_ll_program_doubleword(uint32_t addr, uint64_t data){
 
 	flash_clear_flags();
 
+	flash_restore_dcache(dcache_enabled);
+
 	__set_PRIMASK(primask);
 
 	return result;
@@ -231,6 +331,11 @@ int flash_ll_program_doubleword(uint32_t addr, uint64_t data){
 
 
 int flash_ll_read_doubleword(uint32_t addr, uint64_t *out){
+	uint32_t flash_size = flash_get_size();
+
+	if(flash_size == 0u){
+		return -1;
+	}
 	if(out == NULL){
 		return -1;
 	}
@@ -240,7 +345,7 @@ int flash_ll_read_doubleword(uint32_t addr, uint64_t *out){
 	}
 
 	if(addr < FLASH_BASE ||
-	   addr > (FLASH_BASE + FLASH_SIZE - 8u)){
+	   addr > (FLASH_BASE + flash_size - 8u)){
 		return -1;
 	}
 
@@ -261,6 +366,11 @@ int flash_ll_read_doubleword(uint32_t addr, uint64_t *out){
  * Ограничение 64 бит касается программирования, а не чтения.
  */
 int flash_ll_read_halfword(uint32_t addr, uint16_t *out){
+	uint32_t flash_size = flash_get_size();
+
+	if(flash_size == 0u){
+		return -1;
+	}
 	if(out == NULL){
 		return -1;
 	}
@@ -270,7 +380,7 @@ int flash_ll_read_halfword(uint32_t addr, uint16_t *out){
 	}
 
 	if(addr < FLASH_BASE ||
-	   addr > (FLASH_BASE + FLASH_SIZE - 2u)){
+	   addr > (FLASH_BASE + flash_size - 2u)){
 		return -1;
 	}
 

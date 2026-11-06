@@ -7,7 +7,7 @@
 typedef struct {
     TIM_TypeDef *TIMx;
     uint8_t channel;
-#if defined(STM32G0B1xx)
+#if defined(STM32G0B1xx) || defined(STM32G474xx)
 	uint8_t		af;
 #endif
 }TimerChannel_t;
@@ -17,7 +17,7 @@ typedef struct{
 	GPIO_Pin_t  pin;
     TIM_TypeDef *TIMx;
     uint8_t     channel;
-#if defined(STM32G0B1xx)
+#if defined(STM32G0B1xx) || defined(STM32G474xx)
 	uint8_t		af;
 #endif
 }PinMap_t;

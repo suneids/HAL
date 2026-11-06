@@ -1,5 +1,5 @@
 #include "mcu_config.h"
-#if defined(STM32G0B1xx)
+#if defined(STM32G0B1xx) || defined(STM32G474xx)
 #ifndef FDCAN_H
 #define FDCAN_H
 

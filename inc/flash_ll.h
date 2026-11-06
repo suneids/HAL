@@ -1,11 +1,12 @@
-#ifndef FLASH_LL_F103C6T6
-#define FLASH_LL_F103C6T6
+#ifndef FLASH_LL_H
+#define FLASH_LL_H
+
 #include "mcu_config.h"
 #include <stddef.h>
 #include <stdint.h>
 
-int flash_ll_unlock();
-int flash_ll_lock();
+int flash_ll_unlock(void);
+int flash_ll_lock(void);
 int flash_ll_erase_page(uint32_t page_addr);
 
 #if defined(STM32F103C6Tx)
@@ -13,7 +14,7 @@ int flash_ll_erase_page(uint32_t page_addr);
 int flash_ll_read_halfword(uint32_t addr, uint16_t *out);
 int flash_ll_program_halfword(uint32_t addr, uint16_t data);
 
-#elif defined(STM32G0B1CBTx)
+#elif defined(STM32G0B1xx) || defined(STM32G474xx)
 
 int flash_ll_program_doubleword(
 	uint32_t addr,
@@ -31,4 +32,5 @@ int flash_ll_read_halfword(
 );
 
 #endif
+
 #endif

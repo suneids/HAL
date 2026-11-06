@@ -2,7 +2,7 @@
 #include "../../../inc/tim.h"   // пока только ради RCC_GetPclk1_Hz()
 #include "../../../inc/gpio.h"
 
-#if defined(DSTM32G474CEUx)
+#if defined(STM32G474xx)
 
 #define FDCAN_TQ_PER_BIT       16u
 #define FDCAN_NTSEG1           13u
@@ -49,8 +49,8 @@ static uint8_t FDCAN_PinInit(FDCAN_GlobalTypeDef *FDCANx)
         rx = (GPIO_Pin_t){
             .port   = GPIOB,
             .number = 8,
-            .pull   = 0,
-            .af     = 3,
+            .pull   = GPIO_NOPULL,
+            .af     = 9,
             .moder  = GPIO_MODE_AF,
             .otype  = GPIO_OTYPE_PP,
             .speed  = GPIO_SPEED_HIGH
@@ -59,22 +59,20 @@ static uint8_t FDCAN_PinInit(FDCAN_GlobalTypeDef *FDCANx)
         tx = (GPIO_Pin_t){
             .port   = GPIOB,
             .number = 9,
-            .pull   = 0,
-            .af     = 3,
+            .pull   = GPIO_NOPULL,
+            .af     = 9,
             .moder  = GPIO_MODE_AF,
             .otype  = GPIO_OTYPE_PP,
             .speed  = GPIO_SPEED_HIGH
         };
-
     }
-#ifdef FDCAN2
     else if(FDCANx == FDCAN2){
 
         rx = (GPIO_Pin_t){
             .port   = GPIOB,
             .number = 5,
-            .pull   = 0,
-            .af     = 3,
+            .pull   = GPIO_NOPULL,
+            .af     = 9,
             .moder  = GPIO_MODE_AF,
             .otype  = GPIO_OTYPE_PP,
             .speed  = GPIO_SPEED_HIGH
@@ -83,15 +81,35 @@ static uint8_t FDCAN_PinInit(FDCAN_GlobalTypeDef *FDCANx)
         tx = (GPIO_Pin_t){
             .port   = GPIOB,
             .number = 6,
-            .pull   = 0,
-            .af     = 3,
+            .pull   = GPIO_NOPULL,
+            .af     = 9,
+            .moder  = GPIO_MODE_AF,
+            .otype  = GPIO_OTYPE_PP,
+            .speed  = GPIO_SPEED_HIGH
+        };
+    }
+    else if(FDCANx == FDCAN3){
+
+        rx = (GPIO_Pin_t){
+            .port   = GPIOB,
+            .number = 3,
+            .pull   = GPIO_NOPULL,
+            .af     = 11,
             .moder  = GPIO_MODE_AF,
             .otype  = GPIO_OTYPE_PP,
             .speed  = GPIO_SPEED_HIGH
         };
 
+        tx = (GPIO_Pin_t){
+            .port   = GPIOB,
+            .number = 4,
+            .pull   = GPIO_NOPULL,
+            .af     = 11,
+            .moder  = GPIO_MODE_AF,
+            .otype  = GPIO_OTYPE_PP,
+            .speed  = GPIO_SPEED_HIGH
+        };
     }
-#endif
     else{
         return 0;
     }
@@ -103,15 +121,16 @@ static uint8_t FDCAN_PinInit(FDCAN_GlobalTypeDef *FDCANx)
 }
 
 
-static uint32_t FDCAN_GetRamBase(FDCAN_GlobalTypeDef *FDCANx){
-
+static uint32_t FDCAN_GetRamBase(FDCAN_GlobalTypeDef *FDCANx)
+{
     uint32_t base = SRAMCAN_BASE;
 
-#ifdef FDCAN2
     if(FDCANx == FDCAN2){
         base += SRAMCAN_SIZE;
     }
-#endif
+    else if(FDCANx == FDCAN3){
+        base += SRAMCAN_SIZE * 2u;
+    }
 
     return base;
 }
@@ -144,10 +163,8 @@ static uint8_t FDCAN_WaitClear(volatile uint32_t *reg, uint32_t mask){
 static uint8_t FDCAN_IsValid(FDCAN_GlobalTypeDef *FDCANx)
 {
     if(FDCANx == FDCAN1) return 1;
-
-#ifdef FDCAN2
     if(FDCANx == FDCAN2) return 1;
-#endif
+    if(FDCANx == FDCAN3) return 1;
 
     return 0;
 }
@@ -164,14 +181,16 @@ uint8_t FDCAN_Init(FDCAN_GlobalTypeDef *FDCANx, uint32_t bitrate){
      * FDCAN kernel clock = PCLK1.
      *
      * FDCANSEL:
-     * 00 -> PCLK1
-     * 01 -> PLLQ
-     * 10 -> HSE
+     * 10 -> PCLK1
+     * 00 -> HSE
      */
-    RCC->CCIPR2 &= ~RCC_CCIPR2_FDCANSEL;
+    /*
+     * FDCAN kernel clock = PCLK1
+     */
+    RCC->CCIPR &= ~RCC_CCIPR_FDCANSEL;
+    RCC->CCIPR |= RCC_CCIPR_FDCANSEL_1;
 
-    RCC->APBENR1 |= RCC_APBENR1_FDCANEN;
-
+    RCC->APB1ENR1 |= RCC_APB1ENR1_FDCANEN;
 
     uint32_t fdcan_clk = RCC_GetPclk1_Hz();
 
@@ -334,21 +353,22 @@ uint8_t FDCAN_Init(FDCAN_GlobalTypeDef *FDCANx, uint32_t bitrate){
 uint8_t FDCAN_Send(FDCAN_GlobalTypeDef *FDCANx,
                    uint32_t id,
                    const uint8_t *data,
-                   uint8_t len){
-	if(!FDCAN_IsValid(FDCANx))   return 0;
-    if(id > 0x7FFu) 			 return 0;
-    if(len > 8u) 				 return 0;
-    if(len > 0u && data == NULL) return 0;
+                   uint8_t len)
+{
+    if(!FDCAN_IsValid(FDCANx))       return 0;
+    if(id > 0x7FFu)                  return 0;
+    if(len > 8u)                     return 0;
+    if(len > 0u && data == NULL)     return 0;
 
+    uint32_t timeout = millis();
 
+    while(FDCANx->TXFQS & FDCAN_TXFQS_TFQF)
+    {
+        if((millis() - timeout) >= 10u)
+            return 0;
+    }
 
-    // TX FIFO full
-    if(FDCANx->TXFQS & FDCAN_TXFQS_TFQF) return 0;
-
-    uint32_t put_index =
-        (FDCANx->TXFQS & FDCAN_TXFQS_TFQPI)
-        >> FDCAN_TXFQS_TFQPI_Pos;
-
+    uint32_t put_index = (FDCANx->TXFQS & FDCAN_TXFQS_TFQPI) >> FDCAN_TXFQS_TFQPI_Pos;
 
     uint32_t ram_base = FDCAN_GetRamBase(FDCANx);
 
@@ -358,40 +378,18 @@ uint8_t FDCAN_Send(FDCAN_GlobalTypeDef *FDCANx,
          SRAMCAN_TFQSA +
          put_index * SRAMCAN_TFQ_SIZE);
 
-
-    /*
-     * Tx element W0:
-     *
-     * Standard ID bits 28:18
-     * XTD = 0
-     * RTR = 0
-     * ESI = 0
-     */
     tx[0] = id << 18u;
-
-
-    /*
-     * Tx element W1:
-     *
-     * DLC bits 19:16
-     * BRS = 0
-     * FDF = 0
-     * EFC = 0
-     */
     tx[1] = ((uint32_t)len << 16u);
-
 
     uint32_t data0 = 0u;
     uint32_t data1 = 0u;
 
-    for(uint8_t i = 0; i < len; i++){
-
-        if(i < 4u){
+    for(uint8_t i = 0; i < len; i++)
+    {
+        if(i < 4u)
             data0 |= ((uint32_t)data[i] << (i * 8u));
-        }
-        else{
+        else
             data1 |= ((uint32_t)data[i] << ((i - 4u) * 8u));
-        }
     }
 
     tx[2] = data0;
@@ -399,10 +397,7 @@ uint8_t FDCAN_Send(FDCAN_GlobalTypeDef *FDCANx,
 
     __DSB();
 
-
-    // Request transmission for this FIFO element
     FDCANx->TXBAR = (1u << put_index);
-
 
     return 1;
 }

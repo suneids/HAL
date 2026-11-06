@@ -22,7 +22,7 @@
 	#define GPIO_PULL 0b01
 	#define GPIO_PULL_NONE 0b00
 
-#elif defined(STM32G0B1xx)
+#elif defined(STM32G0B1xx) || defined(STM32G474xx)
 	#define GPIO_MODE_INPUT   0U
 	#define GPIO_MODE_OUTPUT  1U
 	#define GPIO_MODE_AF      2U
@@ -48,7 +48,7 @@ typedef struct{
 	uint8_t mode;
 	uint8_t cnf;
 	uint8_t pull;
-	#elif defined(STM32G0B1xx)
+	#elif defined(STM32G0B1xx) || defined(STM32G474xx)
 	uint8_t moder;
 	uint8_t otype;
 	uint8_t pull;

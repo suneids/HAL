@@ -11,12 +11,14 @@ void SysTick_Init(void);
 uint32_t millis(void);
 void TIM_Init(TIM_TypeDef *TIMx, uint32_t psc, uint32_t arr, uint8_t debounce);
 void SysTick_Delay(uint32_t ms);
-
+void SysTick_Handler(void);
 void TIM_RegisterHandler(TIM_TypeDef *TIMx, TimHandler_t handler);
 uint32_t RCC_GetSysclk_Hz();
 uint32_t RCC_GetHclk_Hz();
 uint32_t RCC_GetPclk1_Hz();
 uint32_t RCC_GetPclk2_Hz();
 uint32_t RCC_GetTIMPclk1_Hz();
-
+#if defined(STM32G474xx)
+uint32_t RCC_GetTIMPclk2_Hz(void);
+#endif
 #endif

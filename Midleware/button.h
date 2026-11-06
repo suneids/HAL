@@ -1,8 +1,8 @@
 #ifndef BUTTON_H
 #define BUTTON_H
 #include <stdint.h>
-#include "../Inc/gpio.h"
-#include "../Inc/tim.h"
+#include "../inc/gpio.h"
+#include "../inc/tim.h"
 
 
 typedef enum{

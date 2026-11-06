@@ -1,48 +1,130 @@
 #include "../../../inc/mcu_config.h"
-#if defined(DSTM32G474CEUx)
+#if defined(STM32G474xx)
 #include "../../../inc/spi.h"
 #include "../../../inc/tim.h"
 #include "../../../inc/dma.h"
 
+typedef enum{
+	SPI_PIN_SCK = 0,
+	SPI_PIN_MISO,
+	SPI_PIN_MOSI
+}SPI_PinFunction_t;
+
+
+static uint8_t SPI_GetAF(
+		void *instance,
+		GPIO_Pin_t pin,
+		SPI_PinFunction_t function){
+
+	if(instance == SPI1){
+		if(function == SPI_PIN_SCK){
+			if(pin.port == GPIOA && pin.number == 5) return 5;
+			if(pin.port == GPIOB && pin.number == 3) return 5;
+#ifdef GPIOG
+			if(pin.port == GPIOG && pin.number == 2) return 5;
+#endif
+		}
+		if(function == SPI_PIN_MISO){
+			if(pin.port == GPIOA && pin.number == 6) return 5;
+			if(pin.port == GPIOB && pin.number == 4) return 5;
+#ifdef GPIOG
+			if(pin.port == GPIOG && pin.number == 3) return 5;
+#endif
+		}
+		if(function == SPI_PIN_MOSI){
+			if(pin.port == GPIOA && pin.number == 7) return 5;
+			if(pin.port == GPIOB && pin.number == 5) return 5;
+#ifdef GPIOG
+			if(pin.port == GPIOG && pin.number == 4) return 5;
+#endif
+		}
+	}
+
+	if(instance == SPI2){
+
+		if(function == SPI_PIN_SCK){
+			if(pin.port == GPIOB && pin.number == 13) return 5;
+		}
+
+		if(function == SPI_PIN_MISO){
+			if(pin.port == GPIOB && pin.number == 14) return 5;
+		}
+
+		if(function == SPI_PIN_MOSI){
+			if(pin.port == GPIOB && pin.number == 15) return 5;
+		}
+	}
+
+	if(instance == SPI3){
+
+		if(function == SPI_PIN_SCK){
+			if(pin.port == GPIOB && pin.number == 3) return 6;
+			if(pin.port == GPIOC && pin.number == 10) return 6;
+#ifdef GPIOG
+			if(pin.port == GPIOG && pin.number == 9) return 6;
+#endif
+		}
+
+		if(function == SPI_PIN_MISO){
+			if(pin.port == GPIOB && pin.number == 4) return 6;
+			if(pin.port == GPIOC && pin.number == 11) return 6;
+		}
+
+		if(function == SPI_PIN_MOSI){
+			if(pin.port == GPIOB && pin.number == 5) return 6;
+			if(pin.port == GPIOC && pin.number == 12) return 6;
+		}
+	}
+
+	if(instance == SPI4){
+		if(function == SPI_PIN_SCK){
+			if(pin.port == GPIOE && pin.number == 2)  return 5;
+			if(pin.port == GPIOE && pin.number == 12) return 5;
+		}
+		if(function == SPI_PIN_MISO){
+			if(pin.port == GPIOE && pin.number == 5)  return 5;
+			if(pin.port == GPIOE && pin.number == 13) return 5;
+		}
+		if(function == SPI_PIN_MOSI){
+			if(pin.port == GPIOE && pin.number == 6)  return 5;
+			if(pin.port == GPIOE && pin.number == 14) return 5;
+		}
+	}
+	return 0xFF;
+}
+
 
 static SPI_Status_t enableSPIClock(void *instance){
 	if(instance == SPI1){
-		RCC->APBENR2 |= RCC_APBENR2_SPI1EN;
-		(void)RCC->APBENR2;
-
-		RCC->APBRSTR2 |= RCC_APBRSTR2_SPI1RST;
-		RCC->APBRSTR2 &= ~RCC_APBRSTR2_SPI1RST;
-
+		RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+		(void)RCC->APB2ENR;
+		RCC->APB2RSTR |= RCC_APB2RSTR_SPI1RST;
+		RCC->APB2RSTR &= ~RCC_APB2RSTR_SPI1RST;
 		return SPI_OK;
 	}
-
-#ifdef SPI2
 	if(instance == SPI2){
-		RCC->APBENR1 |= RCC_APBENR1_SPI2EN;
-		(void)RCC->APBENR1;
-
-		RCC->APBRSTR1 |= RCC_APBRSTR1_SPI2RST;
-		RCC->APBRSTR1 &= ~RCC_APBRSTR1_SPI2RST;
-
+		RCC->APB1ENR1 |= RCC_APB1ENR1_SPI2EN;
+		(void)RCC->APB1ENR1;
+		RCC->APB1RSTR1 |= RCC_APB1RSTR1_SPI2RST;
+		RCC->APB1RSTR1 &= ~RCC_APB1RSTR1_SPI2RST;
 		return SPI_OK;
 	}
-#endif
-
-#ifdef SPI3
 	if(instance == SPI3){
-		RCC->APBENR1 |= RCC_APBENR1_SPI3EN;
-		(void)RCC->APBENR1;
-
-		RCC->APBRSTR1 |= RCC_APBRSTR1_SPI3RST;
-		RCC->APBRSTR1 &= ~RCC_APBRSTR1_SPI3RST;
-
+		RCC->APB1ENR1 |= RCC_APB1ENR1_SPI3EN;
+		(void)RCC->APB1ENR1;
+		RCC->APB1RSTR1 |= RCC_APB1RSTR1_SPI3RST;
+		RCC->APB1RSTR1 &= ~RCC_APB1RSTR1_SPI3RST;
 		return SPI_OK;
 	}
-#endif
-
+	if(instance == SPI4){
+		RCC->APB2ENR |= RCC_APB2ENR_SPI4EN;
+		(void)RCC->APB2ENR;
+		RCC->APB2RSTR |= RCC_APB2RSTR_SPI4RST;
+		RCC->APB2RSTR &= ~RCC_APB2RSTR_SPI4RST;
+		return SPI_OK;
+	}
 	return SPI_ERR_PARAM;
 }
-
 
 static inline uint32_t SPI_BR_Bits(SPI_BaudDiv_t div)
 {
@@ -76,40 +158,42 @@ static void SPI_FlushRx(SPI_TypeDef *SPIx){
 }
 
 SPI_Status_t SPI_Init(SPI_Handle_t *h, SPI_Config_t *cfg){
-	if(!h || !cfg || !cfg->instance){
-		return SPI_ERR_PARAM;
-	}
+	if(!h || !cfg || !cfg->instance) return SPI_ERR_PARAM;
 
 	SPI_Status_t st = enableSPIClock(cfg->instance);
-	if(st != SPI_OK){
-		return st;
-	}
+	if(st != SPI_OK) return st;
 
 	SPI_TypeDef *SPIx = (SPI_TypeDef *)cfg->instance;
+	uint8_t sck_af = SPI_GetAF(cfg->instance, cfg->sck, SPI_PIN_SCK);
+	uint8_t miso_af = SPI_GetAF(cfg->instance, cfg->miso, SPI_PIN_MISO);
+	uint8_t mosi_af = SPI_GetAF(cfg->instance, cfg->mosi, SPI_PIN_MOSI);
+
+	if(sck_af == 0xFF || miso_af == 0xFF || mosi_af == 0xFF) return SPI_ERR_PARAM;
+
 	cfg->sck.moder = GPIO_MODE_AF;
 	cfg->sck.otype = GPIO_OTYPE_PP;
 	cfg->sck.pull  = GPIO_NOPULL;
 	cfg->sck.speed = GPIO_SPEED_VERY_HIGH;
-
-	cfg->mosi.moder = GPIO_MODE_AF;
-	cfg->mosi.otype = GPIO_OTYPE_PP;
-	cfg->mosi.pull  = GPIO_NOPULL;
-	cfg->mosi.speed = GPIO_SPEED_VERY_HIGH;
+	cfg->sck.af    = sck_af;
 
 	cfg->miso.moder = GPIO_MODE_AF;
 	cfg->miso.otype = GPIO_OTYPE_PP;
 	cfg->miso.pull  = GPIO_NOPULL;
 	cfg->miso.speed = GPIO_SPEED_VERY_HIGH;
+	cfg->miso.af    = miso_af;
+
+	cfg->mosi.moder = GPIO_MODE_AF;
+	cfg->mosi.otype = GPIO_OTYPE_PP;
+	cfg->mosi.pull  = GPIO_NOPULL;
+	cfg->mosi.speed = GPIO_SPEED_VERY_HIGH;
+	cfg->mosi.af    = mosi_af;
 
 	GPIO_PinMode(cfg->sck);
-	GPIO_PinMode(cfg->mosi);
 	GPIO_PinMode(cfg->miso);
+	GPIO_PinMode(cfg->mosi);
 
 	uint32_t br = SPI_BR_Bits(cfg->baud_div);
-	if(br == 0xFFFFFFFFu)
-	{
-		return SPI_ERR_PARAM;
-	}
+	if(br == 0xFFFFFFFFu) return SPI_ERR_PARAM;
 
 	h->instance     = cfg->instance;
 	h->sck          = cfg->sck;
@@ -130,42 +214,27 @@ SPI_Status_t SPI_Init(SPI_Handle_t *h, SPI_Config_t *cfg){
 #endif
 
 	uint32_t cr1 = SPI_CR1_MSTR | br;
-
 	switch(cfg->mode){
 		case SPI_MODE0:
 			break;
-
 		case SPI_MODE1:
 			cr1 |= SPI_CR1_CPHA;
 			break;
-
 		case SPI_MODE2:
 			cr1 |= SPI_CR1_CPOL;
 			break;
-
 		case SPI_MODE3:
 			cr1 |= SPI_CR1_CPOL | SPI_CR1_CPHA;
 			break;
-
 		default:
 			return SPI_ERR_PARAM;
 	}
 
-	if(cfg->bitorder == SPI_LSB_FIRST){
-		cr1 |= SPI_CR1_LSBFIRST;
-	}
+	if(cfg->bitorder == SPI_LSB_FIRST) cr1 |= SPI_CR1_LSBFIRST;
 
-	if(cfg->software_nss){
-		cr1 |= SPI_CR1_SSM | SPI_CR1_SSI;
-	}
-	else{
-		/*
-		 * Твой драйвер управляет CS отдельным GPIO,
-		 * поэтому аппаратный NSS пока не поддерживается.
-		 */
-		return SPI_ERR_PARAM;
-	}
 
+	if(cfg->software_nss) cr1 |= SPI_CR1_SSM | SPI_CR1_SSI;
+	else return SPI_ERR_PARAM;
 	/*
 	 * DS = 7:
 	 * размер кадра = DS + 1 = 8 бит.
@@ -174,9 +243,7 @@ SPI_Status_t SPI_Init(SPI_Handle_t *h, SPI_Config_t *cfg){
 	 * RXNE срабатывает при наличии минимум 8 бит,
 	 * поэтому DR можно читать через uint8_t.
 	 */
-	uint32_t cr2 =
-		  (7u << SPI_CR2_DS_Pos)
-		| SPI_CR2_FRXTH;
+	uint32_t cr2 = (7u << SPI_CR2_DS_Pos) | SPI_CR2_FRXTH;
 
 	SPIx->CR1 = cr1;
 	SPIx->CR2 = cr2;

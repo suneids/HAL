@@ -1,5 +1,5 @@
 #include "../../../inc/mcu_config.h"
-#if defined(DSTM32G474CEUx)
+#if defined(STM32G474xx)
 #include "../../../inc/nvstore.h"
 #include "../../../inc/flash_ll.h"
 
@@ -13,7 +13,7 @@
 
 
 /*
- * STM32G0B1:
+ * STM32G474 dual-bank:
  *
  * Flash page size       = 2048 bytes
  * Programming granule   = 8 bytes

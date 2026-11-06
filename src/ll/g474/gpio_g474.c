@@ -1,17 +1,18 @@
 #include "../../../inc/gpio.h"
-#if defined(DSTM32G474CEUx)
+#if defined(STM32G474xx)
 
 
 static void GPIO_ClockEnable(GPIO_Pin_t pin){
-	switch((uintptr_t)pin.port){
-		case (uintptr_t)GPIOA: { RCC->IOPENR |= RCC_IOPENR_GPIOAEN; break; }
-		case (uintptr_t)GPIOB: { RCC->IOPENR |= RCC_IOPENR_GPIOBEN; break; }
-		case (uintptr_t)GPIOC: { RCC->IOPENR |= RCC_IOPENR_GPIOCEN; break; }
-		case (uintptr_t)GPIOD: { RCC->IOPENR |= RCC_IOPENR_GPIODEN; break; }
-		case (uintptr_t)GPIOE: { RCC->IOPENR |= RCC_IOPENR_GPIOEEN; break; }
-		case (uintptr_t)GPIOF: { RCC->IOPENR |= RCC_IOPENR_GPIOFEN; break; }
-		default: 		       { break; 								   }
-	}
+    switch((uintptr_t)pin.port){
+        case (uintptr_t)GPIOA: { RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN; break; }
+        case (uintptr_t)GPIOB: { RCC->AHB2ENR |= RCC_AHB2ENR_GPIOBEN; break; }
+        case (uintptr_t)GPIOC: { RCC->AHB2ENR |= RCC_AHB2ENR_GPIOCEN; break; }
+        case (uintptr_t)GPIOD: { RCC->AHB2ENR |= RCC_AHB2ENR_GPIODEN; break; }
+        case (uintptr_t)GPIOE: { RCC->AHB2ENR |= RCC_AHB2ENR_GPIOEEN; break; }
+        case (uintptr_t)GPIOF: { RCC->AHB2ENR |= RCC_AHB2ENR_GPIOFEN; break; }
+        case (uintptr_t)GPIOG: { RCC->AHB2ENR |= RCC_AHB2ENR_GPIOGEN; break; }
+        default:               { break; }
+    }
 }
 
 
@@ -24,6 +25,7 @@ uint8_t GPIO_GetPortIndex(GPIO_TypeDef *port){
 		case (uintptr_t)GPIOD: { result = 3; break; }
 		case (uintptr_t)GPIOE: { result = 4; break; }
 		case (uintptr_t)GPIOF: { result = 5; break; }
+		case (uintptr_t)GPIOG: { result = 6; break; }
 		default:  			   { break; 			}
 	}
 	return result;

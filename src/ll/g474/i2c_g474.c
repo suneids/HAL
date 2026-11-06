@@ -1,6 +1,6 @@
 #include "../../../inc/i2c.h"
 #include <stdbool.h>
-#if defined(DSTM32G474CEUx)
+#if defined(STM32G474xx)
 
 #define I2C_TIMEOUT 10000u
 #define I2C_TIMING_100KHZ 0x00303D5Bu
@@ -90,50 +90,204 @@ static void I2C_BusRecover(GPIO_Pin_t SDA, GPIO_Pin_t SCL){
 }
 
 
-static void I2C_GPIO_AF_Init(GPIO_Pin_t SDA, GPIO_Pin_t SCL){
+static uint8_t I2C_GetAF(I2C_TypeDef *I2Cx, GPIO_Pin_t pin){
+
+	if(I2Cx == I2C1){
+
+		if(pin.port == GPIOA &&
+		  (pin.number == 13 ||
+		   pin.number == 14 ||
+		   pin.number == 15)){
+			return 4;
+		}
+
+		if(pin.port == GPIOB &&
+		  (pin.number == 7 ||
+		   pin.number == 8 ||
+		   pin.number == 9)){
+			return 4;
+		}
+	}
+
+
+	if(I2Cx == I2C2){
+
+		if(pin.port == GPIOA &&
+		  (pin.number == 8 ||
+		   pin.number == 9 ||
+		   pin.number == 10)){
+			return 4;
+		}
+
+		if(pin.port == GPIOB &&
+		   pin.number == 12){
+			return 4;
+		}
+
+		if(pin.port == GPIOC &&
+		   pin.number == 4){
+			return 4;
+		}
+	}
+
+
+	if(I2Cx == I2C3){
+
+		if(pin.port == GPIOA &&
+		  (pin.number == 8 ||
+		   pin.number == 9)){
+			return 2;
+		}
+
+		if(pin.port == GPIOB &&
+		  (pin.number == 2)){
+			return 4;
+		}
+
+		if(pin.port == GPIOB &&
+		   pin.number == 5){
+			return 8;
+		}
+
+		if(pin.port == GPIOC &&
+		  (pin.number == 8 ||
+		   pin.number == 9 ||
+		   pin.number == 11)){
+			return 8;
+		}
+	}
+
+
+	if(I2Cx == I2C4){
+
+		if(pin.port == GPIOA &&
+		  (pin.number == 13 ||
+		   pin.number == 14)){
+			return 3;
+		}
+
+		if(pin.port == GPIOB &&
+		   pin.number == 7){
+			return 3;
+		}
+
+		if(pin.port == GPIOC &&
+		  (pin.number == 6 ||
+		   pin.number == 7)){
+			return 8;
+		}
+
+		if(pin.port == GPIOD &&
+		   pin.number == 11){
+			return 4;
+		}
+	}
+
+
+	return 0xFF;
+}
+
+
+static bool I2C_GPIO_AF_Init(I2C_TypeDef *I2Cx,
+							 GPIO_Pin_t SDA,
+							 GPIO_Pin_t SCL){
+
+	uint8_t sda_af = I2C_GetAF(I2Cx, SDA);
+	uint8_t scl_af = I2C_GetAF(I2Cx, SCL);
+
+	if(sda_af == 0xFF || scl_af == 0xFF){
+		return false;
+	}
+
+
 	SDA.moder = GPIO_MODE_AF;
 	SDA.otype = GPIO_OTYPE_OD;
 	SDA.pull  = GPIO_PULLUP;
 	SDA.speed = GPIO_SPEED_HIGH;
-	SDA.af    = 6;
+	SDA.af    = sda_af;
+
 
 	SCL.moder = GPIO_MODE_AF;
 	SCL.otype = GPIO_OTYPE_OD;
 	SCL.pull  = GPIO_PULLUP;
 	SCL.speed = GPIO_SPEED_HIGH;
-	SCL.af    = 6;
+	SCL.af    = scl_af;
+
 
 	GPIO_PinMode(SDA);
 	GPIO_PinMode(SCL);
+
+	return true;
 }
 
 
-static void I2C_EnableClockAndReset(I2C_TypeDef *I2Cx){
+static bool I2C_EnableClockAndReset(I2C_TypeDef *I2Cx){
+
 	if(I2Cx == I2C1){
-		RCC->APBENR1 |= RCC_APBENR1_I2C1EN;
 
-		RCC->APBRSTR1 |= RCC_APBRSTR1_I2C1RST;
-		RCC->APBRSTR1 &= ~RCC_APBRSTR1_I2C1RST;
+		RCC->APB1ENR1 |= RCC_APB1ENR1_I2C1EN;
+
+		RCC->APB1RSTR1 |= RCC_APB1RSTR1_I2C1RST;
+		RCC->APB1RSTR1 &= ~RCC_APB1RSTR1_I2C1RST;
+
+		return true;
 	}
 
-#ifdef I2C2
-	else if(I2Cx == I2C2){
+	if(I2Cx == I2C2){
 
+		RCC->APB1ENR1 |= RCC_APB1ENR1_I2C2EN;
+
+		RCC->APB1RSTR1 |= RCC_APB1RSTR1_I2C2RST;
+		RCC->APB1RSTR1 &= ~RCC_APB1RSTR1_I2C2RST;
+
+		return true;
 	}
-#endif
+
+	if(I2Cx == I2C3){
+
+		RCC->APB1ENR1 |= RCC_APB1ENR1_I2C3EN;
+
+		RCC->APB1RSTR1 |= RCC_APB1RSTR1_I2C3RST;
+		RCC->APB1RSTR1 &= ~RCC_APB1RSTR1_I2C3RST;
+
+		return true;
+	}
+
+	if(I2Cx == I2C4){
+
+		RCC->APB1ENR2 |= RCC_APB1ENR2_I2C4EN;
+
+		RCC->APB1RSTR2 |= RCC_APB1RSTR2_I2C4RST;
+		RCC->APB1RSTR2 &= ~RCC_APB1RSTR2_I2C4RST;
+
+		return true;
+	}
+
+	return false;
 }
 
 
-void I2C_Init(I2C_TypeDef *I2Cx, GPIO_Pin_t SDA, GPIO_Pin_t SCL){
+void I2C_Init(I2C_TypeDef *I2Cx,
+			  GPIO_Pin_t SDA,
+			  GPIO_Pin_t SCL){
+
+	if(I2Cx == NULL) return;
 
 	I2C_BusRecover(SDA, SCL);
-	I2C_GPIO_AF_Init(SDA, SCL);
-	I2C_EnableClockAndReset(I2Cx);
+
+	if(!I2C_GPIO_AF_Init(I2Cx, SDA, SCL)){
+		return;
+	}
+
+	if(!I2C_EnableClockAndReset(I2Cx)){
+		return;
+	}
 
 	I2Cx->CR1 &= ~I2C_CR1_PE;
 	I2Cx->TIMINGR = I2C_TIMING_100KHZ;
 
 	I2Cx->CR1 = 0;
+
 	I2C_ClearFlags(I2Cx);
 
 	I2Cx->CR1 |= I2C_CR1_PE;
@@ -258,8 +412,7 @@ uint8_t I2C_Read_Burst(I2C_TypeDef *I2Cx, uint8_t devAddr, uint8_t regAddr, uint
 	if(pBuffer == 0 || size == 0 || size > 255) return false;
 
 	if(regAddr == I2C_NO_REG){
-		I2C_ReadRaw(I2Cx, devAddr, pBuffer, size);
-		return false;
+		return I2C_ReadRaw(I2Cx, devAddr, pBuffer, size);
 	}
 
 	if(!I2C_WriteRegNoStop(I2Cx, devAddr, regAddr)) return false;
