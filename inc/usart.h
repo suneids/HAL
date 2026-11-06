@@ -43,4 +43,5 @@ void USART_IRQHandler_Shared(UART_HandleTypeDef *huart);
 
 uint32_t USART_BrrCalc(uint32_t pclk, uint32_t baud);
 uint8_t USART_Index(USART_TypeDef *USARTx);
+uint8_t USART_TakeRxError(USART_TypeDef *USARTx);
 #endif

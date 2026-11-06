@@ -19,6 +19,7 @@ volatile char usartRXBuffers[2][USART_BUFFER_SIZE] = {{ 0 }}, usartTXBuffers[2][
 
 static UART_HandleTypeDef huart1 = {USART1, NULL, USART_RXHandler_Default, USART_TXHandler_Default, 0};
 static UART_HandleTypeDef huart2 = {USART2, NULL, USART_RXHandler_Default, USART_TXHandler_Default, 1};
+static volatile uint8_t uart_rx_error[2] = {0};
 
 void USART_Init(USART_TypeDef *USARTx, uint32_t  baud_rate, uint8_t parity, uint8_t stop_bits){
 	GPIO_Pin_t tx = {.port = GPIOA, .moder = GPIO_MODE_AF, .otype = GPIO_OTYPE_PP,
@@ -49,7 +50,7 @@ void USART_Init(USART_TypeDef *USARTx, uint32_t  baud_rate, uint8_t parity, uint
 	USARTx->CR1 &= ~(USART_CR1_UE | USART_CR1_RXNEIE_RXFNEIE | USART_CR1_PCE |
 				 	 USART_CR1_PS | USART_CR1_M0 | USART_CR1_M1);
 
-	if (USARTx->ISR & USART_ISR_RXNE_RXFNE) (uint8_t)USARTx->RDR;
+	if(USARTx->ISR & USART_ISR_RXNE_RXFNE) (void)USARTx->RDR;
 	if(USARTx->ISR & USART_ISR_ORE) USARTx->ICR = USART_ICR_ORECF;
 
 	if(!parity){
@@ -197,6 +198,9 @@ void USART2_LPUART2_IRQHandler(void){
 void USART_IRQHandler_Shared(UART_HandleTypeDef *huart){
 	USART_TypeDef *USARTx = huart->Instance;
 	uint8_t port_id = huart->port_id;
+	if(USARTx->ISR & (USART_ISR_ORE | USART_ISR_NE | USART_ISR_FE | USART_ISR_PE)){
+	    uart_rx_error[port_id] = 1;
+	}
 	// 1. ==== RX (Динамическая часть) ====
 	if (USARTx->ISR & USART_ISR_RXNE_RXFNE) {
 		uint8_t byte = (uint8_t)(USARTx->RDR & 0xFF);
@@ -227,6 +231,7 @@ void USART_IRQHandler_Shared(UART_HandleTypeDef *huart){
 	if(USARTx->ISR & USART_ISR_ORE) USARTx->ICR = USART_ICR_ORECF;
 	if(USARTx->ISR &USART_ISR_NE)   USARTx->ICR = USART_ICR_NECF;
 	if(USARTx->ISR & USART_ISR_FE)  USARTx->ICR = USART_ICR_FECF;
+	if(USARTx->ISR & USART_ISR_PE) USARTx->ICR = USART_ICR_PECF;
 }
 
 
@@ -241,4 +246,14 @@ uint32_t USART_BrrCalc(uint32_t pclk, uint32_t baud){
 	return (mant << 4) | (frac & 0xFu);
 }
 
+
+uint8_t USART_TakeRxError(USART_TypeDef *USARTx){
+    uint8_t id = USART_Index(USARTx);
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    uint8_t error = uart_rx_error[id];
+    uart_rx_error[id] = 0;
+    __set_PRIMASK(primask);
+    return error;
+}
 #endif
