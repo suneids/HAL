@@ -23,9 +23,9 @@ struct UART_HandleTypeDef {
 };
 
 
-extern volatile uint16_t rx_heads[2], tx_heads[2];
-extern volatile uint16_t rx_tails[2], tx_tails[2];
-extern volatile char usartRXBuffers[2][USART_BUFFER_SIZE], usartTXBuffers[2][USART_BUFFER_SIZE];
+extern volatile uint16_t rx_heads[], tx_heads[];
+extern volatile uint16_t rx_tails[], tx_tails[];
+extern volatile char usartRXBuffers[][USART_BUFFER_SIZE], usartTXBuffers[][USART_BUFFER_SIZE];
 
 
 void echo(USART_TypeDef *USARTx);

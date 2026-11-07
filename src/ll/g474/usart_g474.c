@@ -8,12 +8,13 @@
 static void USART_RXHandler_Default(UART_HandleTypeDef* huart, uint8_t byte);
 static void USART_TXHandler_Default(UART_HandleTypeDef* huart);
 
-volatile uint16_t rx_heads[2] = { 0 }, tx_heads[2] = { 0 };
-volatile uint16_t rx_tails[2] = { 0 }, tx_tails[2] = { 0 };
-volatile char usartRXBuffers[2][USART_BUFFER_SIZE] = {{ 0 }}, usartTXBuffers[2][USART_BUFFER_SIZE] = {{ 0 }};
+volatile uint16_t rx_heads[3] = { 0 }, tx_heads[3] = { 0 };
+volatile uint16_t rx_tails[3] = { 0 }, tx_tails[3] = { 0 };
+volatile char usartRXBuffers[3][USART_BUFFER_SIZE] = {{ 0 }}, usartTXBuffers[3][USART_BUFFER_SIZE] = {{ 0 }};
 
 static UART_HandleTypeDef huart1 = {USART1, NULL, USART_RXHandler_Default, USART_TXHandler_Default, 0};
 static UART_HandleTypeDef huart2 = {USART2, NULL, USART_RXHandler_Default, USART_TXHandler_Default, 1};
+static UART_HandleTypeDef huart3 = {USART3, NULL, USART_RXHandler_Default, USART_TXHandler_Default, 2};
 
 void USART_Init(USART_TypeDef *USARTx, uint32_t baud_rate, uint8_t parity, uint8_t stop_bits){
 	if(baud_rate == 0u) return;
@@ -199,15 +200,19 @@ void echo(USART_TypeDef *USARTx){
 
 
 uint8_t USART_Index(USART_TypeDef *USARTx){
-	if(USARTx == USART2){
+	if(USARTx == USART2)
 		return 1;
-	}
+	else if(USARTx == USART3)
+		return 2;
 	return 0;
 }
 
 void USART_SetHandlers(USART_TypeDef* USARTx, UART_RxCallback customRxHandler, UART_TxCallback customTxHandler, TIM_TypeDef* timer) {
-	UART_HandleTypeDef* h = (USARTx == USART1) ? &huart1 : &huart2;
-
+	UART_HandleTypeDef* h;
+	if(USARTx == USART1) 	  h = &huart1;
+	else if(USARTx == USART2) h = &huart2;
+	else if(USARTx == USART3) h = &huart3;
+	else return;
 	h->RxHandler = customRxHandler? customRxHandler : USART_RXHandler_Default;
 	h->TxHandler = customTxHandler? customTxHandler : USART_TXHandler_Default;
 	h->TimerInstance = timer; // Если нужен таймер для T3.5
@@ -236,6 +241,11 @@ void USART1_IRQHandler(void){
 
 void USART2_IRQHandler(void){
 	USART_IRQHandler_Shared(&huart2);
+}
+
+
+void USART3_IRQHandler(void){
+	USART_IRQHandler_Shared(&huart3);
 }
 
 

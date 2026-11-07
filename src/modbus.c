@@ -55,8 +55,13 @@ void MODBUS_Init(Modbus_cfg *cfg){
 	    NVIC_EnableIRQ(TIM2_IRQn);
 	}
 	else if(config->timer == TIM3) {
-	    NVIC_ClearPendingIRQ(TIM3_TIM4_IRQn);
-	    NVIC_EnableIRQ(TIM3_TIM4_IRQn);
+		#if defined(STM32G0B1xx)
+			NVIC_ClearPendingIRQ(TIM3_TIM4_IRQn);
+			NVIC_EnableIRQ(TIM3_TIM4_IRQn);
+		#elif defined(STM32G474xx)
+			NVIC_ClearPendingIRQ(TIM3_IRQn);
+			NVIC_EnableIRQ(TIM3_IRQn);
+		#endif
 	}
 
 }
