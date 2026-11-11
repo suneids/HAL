@@ -2,6 +2,7 @@
 
 #if defined(STM32G0B1xx)
 
+#define DMA_REQUEST_DAC1_CH1 8u
 #ifndef DMA_REQUEST_SPI1_TX
 #define DMA_REQUEST_SPI1_TX 0x11u
 #endif
@@ -77,14 +78,20 @@ void DMA_Init(DMA_Channel_TypeDef *DMAx, uint32_t peripheral_addr, uint32_t memo
 	DMAx->CMAR = memory_addr;
 	DMAx->CNDTR = data_count;
 
-	DMAx->CCR = DMA_CCR_MINC 	 |
-			     DMA_CCR_CIRC  	 |
-				 DMA_CCR_MSIZE_0 |
-				 DMA_CCR_PSIZE_0 |
-				 DMA_CCR_PL_0;
 
+	uint32_t ccr = DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_MSIZE_0 | DMA_CCR_PSIZE_0 |  DMA_CCR_PL_0;
+
+	if(peripheral_addr == (uint32_t)&ADC1->DR){
+	    DMA_SetRequest(DMAx, DMA_REQUEST_ADC1);
+	}
+	else if(peripheral_addr == (uint32_t)&DAC1->DHR12R1){
+	    DMA_SetRequest(DMAx, DMA_REQUEST_DAC1_CH1);
+	    ccr |= DMA_CCR_DIR;
+	}
+
+	// Вместо прежнего присваивания DMAx->CCR
+	DMAx->CCR = ccr;
 	DMAx->CCR |= DMA_CCR_EN;
-
 }
 
 

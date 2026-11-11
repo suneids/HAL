@@ -47,6 +47,7 @@ void TIM_Init(TIM_TypeDef *TIMx, uint32_t psc, uint32_t arr, uint8_t debounce){
 		case (uintptr_t)TIM1: { RCC->APBENR2 |= RCC_APBENR2_TIM1EN; break; 										   }
 		case (uintptr_t)TIM2: { RCC->APBENR1 |= RCC_APBENR1_TIM2EN; if(debounce) NVIC_EnableIRQ(TIM2_IRQn); break; }
 		case (uintptr_t)TIM3: { RCC->APBENR1 |= RCC_APBENR1_TIM3EN; break; 										   }
+		case (uintptr_t)TIM6: { RCC->APBENR1 |= RCC_APBENR1_TIM6EN; break;										   }
 	}
 
 	TIMx->PSC  = psc;
@@ -266,5 +267,20 @@ void Clock64MHz_FromHSE(void){
 
     /* 10) Обновить CMSIS-переменную */
     SystemCoreClockUpdate();
+}
+
+
+void TIM_Start(TIM_TypeDef *TIMx){
+    TIMx->CR1 |= TIM_CR1_CEN;
+}
+
+
+void TIM_Stop(TIM_TypeDef *TIMx){
+    TIMx->CR1 &= ~TIM_CR1_CEN;
+}
+
+
+void TIM_SetTRGOUpdate(TIM_TypeDef *TIMx){
+    TIMx->CR2 = (TIMx->CR2 & ~TIM_CR2_MMS) | TIM_CR2_MMS_1;
 }
 #endif

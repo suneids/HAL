@@ -18,9 +18,12 @@ uint32_t RCC_GetHclk_Hz();
 uint32_t RCC_GetPclk1_Hz();
 uint32_t RCC_GetPclk2_Hz();
 uint32_t RCC_GetTIMPclk1_Hz();
+void TIM_Start(TIM_TypeDef *TIMx);
+void TIM_Stop(TIM_TypeDef *TIMx);
 #if defined(STM32G474xx)
 	uint32_t RCC_GetTIMPclk2_Hz(void);
 #elif defined(STM32G0B1xx)
 	void Clock64MHz_FromHSE(void);
+	void TIM_SetTRGOUpdate(TIM_TypeDef *TIMx);
 #endif
 #endif

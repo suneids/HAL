@@ -74,7 +74,7 @@
 /** @addtogroup STM32G4xx_System_Private_Includes
   * @{
   */
-
+#if defined(STM32G474xx)
 #include "stm32g4xx.h"
 
 #if !defined  (HSE_VALUE)
@@ -271,7 +271,7 @@ void SystemCoreClockUpdate(void)
   SystemCoreClock >>= tmp;
 }
 
-
+#endif
 /**
   * @}
   */
