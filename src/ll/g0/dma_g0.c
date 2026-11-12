@@ -11,6 +11,27 @@
 #define DMA_REQUEST_ADC1 5u
 #endif
 
+static DMA_Callback_t dma1_ch1_handler = NULL;
+
+void DMA_SetHandler(DMA_Channel_TypeDef *DMAx, DMA_Callback_t callback){
+    if (DMAx != DMA1_Channel1)
+        return;
+
+    dma1_ch1_handler = callback;
+
+    DMA1->IFCR = DMA_IFCR_CHTIF1 | DMA_IFCR_CTCIF1;
+
+    if (callback) {
+        DMAx->CCR |= DMA_CCR_HTIE | DMA_CCR_TCIE;
+        NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+    }
+    else {
+        DMAx->CCR &= ~(DMA_CCR_HTIE | DMA_CCR_TCIE);
+        NVIC_DisableIRQ(DMA1_Channel1_IRQn);
+    }
+}
+
+
 static uint8_t DMA_GetChannelIndex(DMA_Channel_TypeDef *DMAx){
 	uint8_t result = 0xFF;
 	if(DMAx == DMA1_Channel1) 	   result = 0;
@@ -162,5 +183,27 @@ uint8_t DMA_IsReady(DMA_Channel_TypeDef *DMAx)
     DMA1->IFCR = DMA_IFCR_CTCIF1 << (index * 4u);
 
     return 1u;
+}
+
+void DMA1_Channel1_IRQHandler(void){
+    uint32_t flags = DMA1->ISR;
+
+    if (flags & DMA_ISR_HTIF1) {
+        DMA1->IFCR = DMA_IFCR_CHTIF1;
+
+        if (dma1_ch1_handler)
+            dma1_ch1_handler(DMA_EVENT_HT);
+    }
+
+    if (flags & DMA_ISR_TCIF1) {
+        DMA1->IFCR = DMA_IFCR_CTCIF1;
+
+        if (dma1_ch1_handler)
+            dma1_ch1_handler(DMA_EVENT_TC);
+    }
+
+    if (flags & DMA_ISR_TEIF1) {
+        DMA1->IFCR = DMA_IFCR_CTEIF1;
+    }
 }
 #endif
