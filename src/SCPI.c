@@ -1,5 +1,6 @@
 #include "../inc/SCPI.h"
 #include <string.h>
+#include <stdio.h>
 #include <ctype.h>
 #define SCPI_BUFFER_SIZE 128
 #define SCPI_QUEUE_SIZE 8
@@ -14,7 +15,7 @@ static char rx_buffer[SCPI_BUFFER_SIZE];
 static volatile uint16_t rx_length = 0;
 static volatile uint8_t rx_ready = 0;
 static uint8_t rx_overflow = 0;
-
+static uint8_t esc_state = 0;
 static SCPI_cfg *config;
 
 static void SCPI_RxCallback(UART_HandleTypeDef *huart, uint8_t byte){
@@ -60,6 +61,7 @@ void SCPI_Init(SCPI_cfg *cfg){
     rx_length = 0;
     rx_ready = 0;
     rx_overflow = 0;
+    esc_state = 0;
     scpi_error = SCPI_ERR_NONE;
 
     ReconfigureUARTCFG();
@@ -69,10 +71,28 @@ void SCPI_Init(SCPI_cfg *cfg){
 
 void SCPI_FeedByte(uint8_t byte){
     if(rx_ready) return;
+    if (byte == 0x1B) {
+        esc_state = 1;
+        return;
+    }
 
-    if(byte == '\r') return;
+    if (esc_state == 1) {
+        esc_state = (byte == '[') ? 2 : 0;
+        return;
+    }
 
-    if(byte == '\n'){
+    if (esc_state == 2) {
+        if (byte >= 0x40 && byte <= 0x7E)
+            esc_state = 0;
+        return;
+    }
+
+    if (byte == 0x08 || byte == 0x7F) {
+        if (rx_length > 0) rx_length--;
+        return;
+    }
+
+    if(byte == '\r' || byte == '\n'){
         if(rx_overflow){
             rx_overflow = 0;
             rx_length = 0;
@@ -88,6 +108,8 @@ void SCPI_FeedByte(uint8_t byte){
 
     if(rx_overflow) return;
 
+    if (byte < 0x20 || byte > 0x7E)
+        return;
     if(rx_length < SCPI_BUFFER_SIZE - 1){
         rx_buffer[rx_length++] = (char)byte;
     }
@@ -222,11 +244,28 @@ void SCPI_Process(void){
             break;
         }
 
-        if(!def){
-        	SCPI_SetError(SCPI_ERR_UNKNOWN);
+        if (!def) {
+            SCPI_SetError(SCPI_ERR_UNKNOWN);
             return;
         }
 
+//DEBUGGING
+//        if (!def) {
+//            char msg[128];
+//            uint32_t pos = 0;
+//
+//            for (uint32_t i = 0; full[i] != '\0'; i++) {
+//                pos += snprintf(msg + pos, sizeof(msg) - pos,
+//                                "%02X ", (uint8_t)full[i]);
+//            }
+//
+//            msg[pos++] = '\r';
+//            msg[pos++] = '\n';
+//
+//            SCPI_Write(msg, pos);
+//            SCPI_SetError(SCPI_ERR_UNKNOWN);
+//            return;
+//        }
         // Проверяем наличие аргумента
         if((def->argument == SCPI_ARG_REQUIRED && !has_value) || (def->argument == SCPI_ARG_NONE && has_value)){
             SCPI_SetError(SCPI_ERR_ARGUMENT);
